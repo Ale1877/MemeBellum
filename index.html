@@ -1,0 +1,952 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MECHABELLUM REMAKE // IRON SIEGE</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peerjs.min.js"></script>
+<style>
+  :root{
+    --bg:#0a0e0a;
+    --panel:#111711;
+    --panel2:#0d120d;
+    --line:#1e2a1e;
+    --phos:#7dff6b;
+    --phos-dim:#4a8f42;
+    --amber:#ffb347;
+    --red:#ff5a4d;
+    --ink:#c8d6c4;
+    --ink-dim:#6e7d6a;
+    --mono:'Share Tech Mono',monospace;
+    --disp:'Chakra Petch',sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    background:
+      radial-gradient(ellipse at 50% -10%, #12180f 0%, var(--bg) 60%),
+      repeating-linear-gradient(0deg, transparent 0 2px, rgba(0,0,0,.18) 2px 3px);
+    color:var(--ink);
+    font-family:var(--mono);
+    min-height:100vh;
+    padding:18px;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    overflow-x:hidden;
+  }
+  .screen{width:100%;max-width:1040px;display:none}
+  .screen.active{display:block}
+
+  /* ---------- Header ---------- */
+  header.app{
+    width:100%;max-width:1040px;
+    display:flex;align-items:baseline;justify-content:space-between;
+    border-bottom:1px solid var(--line);
+    padding-bottom:10px;margin-bottom:22px;
+  }
+  .logo{font-family:var(--disp);font-weight:700;font-size:clamp(22px,4vw,34px);letter-spacing:4px;color:var(--phos);text-shadow:0 0 18px rgba(125,255,107,.25)}
+  .logo b{color:var(--amber)}
+  .sub{font-size:11px;color:var(--ink-dim);letter-spacing:2px}
+  .status-chip{font-size:11px;color:var(--ink-dim);border:1px solid var(--line);padding:4px 9px}
+  .status-chip.on{color:var(--phos);border-color:var(--phos-dim)}
+
+  /* ---------- Lobby ---------- */
+  .lobby-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  @media(max-width:720px){.lobby-grid{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--line);padding:22px}
+  .card h2{font-family:var(--disp);font-weight:600;font-size:16px;letter-spacing:2px;color:var(--ink);margin-bottom:4px}
+  .card p.hint{font-size:12px;color:var(--ink-dim);margin-bottom:16px;line-height:1.5}
+  label.fld{display:block;font-size:11px;letter-spacing:1px;color:var(--ink-dim);margin:14px 0 5px}
+  input[type=text]{
+    width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--phos);
+    font-family:var(--mono);font-size:15px;padding:11px 12px;letter-spacing:1px;outline:none;
+  }
+  input[type=text]:focus{border-color:var(--phos-dim);box-shadow:0 0 0 1px var(--phos-dim) inset}
+  button{
+    font-family:var(--disp);font-weight:600;letter-spacing:2px;cursor:pointer;
+    background:transparent;color:var(--phos);border:1px solid var(--phos-dim);
+    padding:11px 16px;font-size:13px;transition:background .12s,color .12s;width:100%;margin-top:16px;
+  }
+  button:hover:not(:disabled){background:var(--phos);color:#07120a}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  button.ghost{border-color:var(--line);color:var(--ink-dim)}
+  button.ghost:hover:not(:disabled){background:var(--line);color:var(--ink)}
+  button.danger{border-color:#5a2420;color:var(--red)}
+  button.danger:hover:not(:disabled){background:var(--red);color:#1a0806}
+  .code-big{font-family:var(--disp);font-weight:700;font-size:30px;letter-spacing:8px;color:var(--amber);text-align:center;padding:14px;border:1px dashed var(--line);margin-top:8px;cursor:copy}
+  .mini{font-size:11px;color:var(--ink-dim);margin-top:8px;text-align:center}
+
+  /* ---------- Game HUD ---------- */
+  .hud{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+  .hud .seg{display:flex;gap:18px;flex-wrap:wrap}
+  .stat{font-size:12px}
+  .stat b{color:var(--phos);font-size:16px}
+  .stat .lbl{color:var(--ink-dim);font-size:10px;letter-spacing:1px;display:block}
+  .vs-tag{font-family:var(--disp);letter-spacing:2px;font-size:12px;color:var(--ink-dim)}
+  .vs-tag .me{color:var(--phos)}.vs-tag .foe{color:var(--red)}
+
+  .topbar{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap}
+  .topbar #btnReady{width:auto;flex:1;min-width:220px;margin-top:0}
+  .speed{display:flex;align-items:center;gap:6px}
+  .speed .lbl{font-size:10px;color:var(--ink-dim);letter-spacing:1px;margin-right:4px}
+  .speed .spd{width:auto;margin-top:0;padding:7px 10px;font-size:12px;border-color:var(--line);color:var(--ink-dim)}
+  .speed .spd.active{border-color:var(--phos-dim);color:var(--phos)}
+  .speed .spd:hover:not(.active){background:var(--line);color:var(--ink)}
+
+  .board-wrap{display:grid;grid-template-columns:1fr;gap:12px}
+  canvas#field{width:100%;background:
+    linear-gradient(0deg,#0c110b,#0a0e0a);
+    border:1px solid var(--line);display:block;touch-action:none}
+
+  .shop{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-top:14px}
+  .unit-card{background:var(--panel);border:1px solid var(--line);padding:10px;cursor:pointer;transition:border-color .1s,transform .05s;user-select:none}
+  .unit-card:hover{border-color:var(--phos-dim)}
+  .unit-card:active{transform:scale(.98)}
+  .unit-card.cant{opacity:.45;cursor:not-allowed}
+  .unit-card .ic{font-size:20px}
+  .unit-card .nm{font-family:var(--disp);font-weight:600;font-size:13px;letter-spacing:1px;margin-top:4px;color:var(--ink)}
+  .unit-card .cost{color:var(--amber);font-size:12px;margin-top:3px}
+  .unit-card .role{color:var(--ink-dim);font-size:10px;margin-top:4px;line-height:1.3}
+  .unit-card .cnt{float:right;color:var(--phos);font-size:12px}
+
+  .log{background:var(--panel2);border:1px solid var(--line);height:150px;overflow-y:auto;padding:10px;font-size:12px;line-height:1.55;margin-top:14px}
+  .log .r{color:var(--ink-dim)}
+  .log .r b.p1{color:var(--phos)}
+  .log .r b.p2{color:var(--red)}
+  .log .r.win{color:var(--amber)}
+
+  .modebar{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
+  .modebar .mode{width:auto;flex:1;min-width:120px;margin-top:0;font-size:12px;padding:9px 10px;border-color:var(--line);color:var(--ink-dim)}
+  .modebar .mode.active{border-color:var(--phos-dim);color:var(--phos)}
+  .modebar .mode:hover:not(.active){background:var(--line);color:var(--ink)}
+  .unit-card .tech-tag{display:block;margin-top:5px;font-size:10px;color:var(--ink-dim);border-top:1px solid var(--line);padding-top:4px}
+  .unit-card .tech-tag.has{color:var(--amber)}
+  .lvl-badge{position:absolute;top:4px;right:5px;font-size:10px;color:#07120a;background:var(--amber);padding:0 4px;font-family:var(--disp);font-weight:700}
+  .bar{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap}
+  .bar button{width:auto;flex:1;min-width:140px;margin-top:0}
+  .phase-note{font-size:12px;color:var(--ink-dim);margin-top:10px;min-height:16px;letter-spacing:.5px}
+  .selhint{font-size:12px;color:var(--amber);min-height:16px;margin-top:4px}
+
+  .toast{position:fixed;top:16px;left:50%;transform:translateX(-50%);background:var(--panel);border:1px solid var(--phos-dim);color:var(--phos);padding:10px 18px;font-size:13px;letter-spacing:1px;z-index:80;display:none}
+
+  /* ---------- Modal ---------- */
+  .modal-bg{position:fixed;inset:0;background:rgba(4,8,4,.78);z-index:60;display:none;align-items:center;justify-content:center;padding:18px}
+  .modal-bg.show{display:flex}
+  .modal{background:var(--panel);border:1px solid var(--phos-dim);max-width:420px;width:100%;padding:22px;position:relative;box-shadow:0 0 40px rgba(125,255,107,.1)}
+  .modal-x{position:absolute;top:8px;right:10px;width:auto;margin:0;border:none;color:var(--ink-dim);font-size:22px;padding:2px 8px;background:transparent}
+  .modal-x:hover{background:transparent;color:var(--red)}
+  .modal .m-head{display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--line);padding-bottom:12px;margin-bottom:12px}
+  .modal .m-ic{font-size:34px}
+  .modal .m-name{font-family:var(--disp);font-weight:700;font-size:20px;letter-spacing:2px;color:var(--phos)}
+  .modal .m-type{font-size:11px;color:var(--amber);letter-spacing:1px;margin-top:2px}
+  .modal .m-role{font-size:12px;color:var(--ink-dim);line-height:1.5;margin-bottom:14px}
+  .modal .m-stats{display:grid;grid-template-columns:1fr 1fr;gap:8px 16px;margin-bottom:14px}
+  .modal .m-stat{display:flex;justify-content:space-between;font-size:12px;border-bottom:1px solid var(--line);padding-bottom:4px}
+  .modal .m-stat .k{color:var(--ink-dim)}
+  .modal .m-stat .v{color:var(--ink)}
+  .modal .m-block{border:1px solid var(--line);padding:10px;margin-top:10px}
+  .modal .m-block h4{font-family:var(--disp);font-size:12px;letter-spacing:1px;color:var(--amber);margin-bottom:5px}
+  .modal .m-block p{font-size:12px;color:var(--ink-dim);line-height:1.5}
+  .modal .m-adv{font-size:11px;line-height:1.7;margin-top:4px}
+  .modal .m-adv .good{color:var(--phos)}
+  .modal .m-adv .bad{color:var(--red)}
+  .unit-card .info-btn{position:absolute;top:4px;right:5px;width:auto;margin:0;border:1px solid var(--line);color:var(--ink-dim);font-size:11px;padding:1px 6px;line-height:1.4;background:transparent;font-family:var(--mono)}
+  .unit-card .info-btn:hover{border-color:var(--phos-dim);color:var(--phos);background:transparent}
+
+  .legend{display:flex;gap:16px;flex-wrap:wrap;font-size:11px;color:var(--ink-dim);margin-top:10px}
+  .legend span b{color:var(--ink)}
+</style>
+</head>
+<body>
+
+<header class="app">
+  <div>
+    <div class="logo">IRON <b>SIEGE</b></div>
+    <div class="sub">TACTICAL MECH AUTOBATTLER // P2P</div>
+  </div>
+  <div class="status-chip" id="netChip">OFFLINE</div>
+</header>
+
+<!-- ============ LOBBY ============ -->
+<section class="screen active" id="scrLobby">
+  <label class="fld">NOMBRE DE COMANDANTE</label>
+  <input type="text" id="playerName" maxlength="14" placeholder="escribí tu nombre" autocomplete="off">
+  <div class="lobby-grid" style="margin-top:20px">
+    <div class="card">
+      <h2>CREAR PARTIDA</h2>
+      <p class="hint">Generás un código de sala y se lo pasás a tu rival. Esperás a que se una.</p>
+      <button id="btnCreate">CREAR SALA</button>
+      <div id="createBox" style="display:none">
+        <div class="code-big" id="roomCode" title="click para copiar">----</div>
+        <div class="mini">Pasale este código a tu rival · click para copiar</div>
+        <div class="phase-note" id="createWait">Esperando oponente…</div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>UNIRSE</h2>
+      <p class="hint">Pegá el código que te pasaron y entrás a la sala.</p>
+      <label class="fld">CÓDIGO DE SALA</label>
+      <input type="text" id="joinCode" maxlength="6" placeholder="ABC123" autocomplete="off" style="text-transform:uppercase">
+      <button id="btnJoin">UNIRSE A SALA</button>
+      <div class="phase-note" id="joinStatus"></div>
+    </div>
+  </div>
+  <p class="mini" style="margin-top:22px;max-width:620px;margin-left:auto;margin-right:auto;line-height:1.6">
+    Sin cuentas, sin servidor. Los navegadores se conectan directo (WebRTC). El combate se simula igual en ambos lados con la misma semilla, así que los dos ven el mismo resultado.
+  </p>
+</section>
+
+<!-- ============ GAME ============ -->
+<section class="screen" id="scrGame">
+  <div class="hud">
+    <div class="seg">
+      <div class="stat"><span class="lbl">RONDA</span><b id="hRound">1</b></div>
+      <div class="stat"><span class="lbl">CRÉDITOS</span><b id="hGold">0</b></div>
+      <div class="stat"><span class="lbl">INGRESO/RONDA</span><b id="hInc">0</b></div>
+      <div class="stat"><span class="lbl">MIS VICTORIAS</span><b id="hWinMe">0</b></div>
+      <div class="stat"><span class="lbl">RIVAL</span><b id="hWinFoe" style="color:var(--red)">0</b></div>
+    </div>
+    <div class="vs-tag"><span class="me" id="tagMe">YO</span> VS <span class="foe" id="tagFoe">RIVAL</span></div>
+  </div>
+
+  <div class="topbar">
+    <button id="btnReady">LISTO ▸ CONFIRMAR DESPLIEGUE</button>
+    <div class="speed" id="speedCtl">
+      <span class="lbl">VELOCIDAD</span>
+      <button class="spd" data-spd="0.5">0.5×</button>
+      <button class="spd active" data-spd="1">1×</button>
+      <button class="spd" data-spd="2">2×</button>
+      <button class="spd" data-spd="4">4×</button>
+    </div>
+  </div>
+
+  <div class="board-wrap">
+    <canvas id="field" width="1000" height="440"></canvas>
+  </div>
+  <div class="legend">
+    <span><b style="color:var(--phos)">■</b> tu zona de despliegue (mitad inferior)</span>
+    <span><b style="color:var(--red)">■</b> zona enemiga (mitad superior, oculta hasta el combate)</span>
+    <span><b>tip:</b> tocá una unidad en tienda, luego el campo para desplegar</span>
+  </div>
+
+  <div class="modebar" id="modeBar">
+    <button class="mode active" data-mode="place">DESPLEGAR</button>
+    <button class="mode" data-mode="merge">FUSIONAR ▲ NIVEL</button>
+    <button class="mode" data-mode="tech">TECNOLOGÍA</button>
+  </div>
+  <div class="selhint" id="selHint">Elegí una unidad de la tienda para desplegar.</div>
+  <div class="shop" id="shop"></div>
+
+  <div class="bar">
+    <button class="ghost" id="btnUndo">DESHACER ÚLTIMA</button>
+  </div>
+  <div class="phase-note" id="phaseNote"></div>
+
+  <div class="log" id="log"></div>
+</section>
+
+<!-- ============ UNIT INFO MODAL ============ -->
+<div class="modal-bg" id="modalBg">
+  <div class="modal" id="modalBox">
+    <button class="modal-x" id="modalX">×</button>
+    <div id="modalContent"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============================================================
+   IRON SIEGE — Mechabellum-like P2P autobattler
+   Single file. PeerJS for transport. Deterministic sim.
+   ============================================================ */
+
+/* ---------- Deterministic RNG (mulberry32) ---------- */
+function makeRNG(seed){
+  let a = seed >>> 0;
+  return function(){
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/* ---------- Unit catalog ----------
+   type counters (rock-paper-scissors-ish):
+   swarm  > heavy   (chip down big targets)
+   heavy  > ranged  (soak + close distance)
+   ranged > swarm   (splash/range shreds light)
+   assault is balanced generalist.
+*/
+const UNITS = {
+  crawler:{ id:'crawler', name:'Crawler', ic:'🕷', cost:60,  hp:75,  dmg:16, rng:58,  spd:2.4, type:'swarm',   count:4, role:'Enjambre barato. Rompe blancos pesados.',
+    tech:{ id:'frenzy', name:'Frenesí', cost:90, desc:'+60% cadencia de disparo' } },
+  marauder:{id:'marauder',name:'Marauder',ic:'🤖', cost:120, hp:320, dmg:42, rng:95,  spd:1.5, type:'assault', count:1, role:'Soldado versátil. Sin debilidad clara.',
+    tech:{ id:'rockets', name:'Cohetes', cost:130, desc:'+50% daño y +40 alcance' } },
+  warden:{  id:'warden',  name:'Warden',  ic:'🛡', cost:200, hp:1000,dmg:62, rng:72,  spd:1.0, type:'heavy',   count:1, role:'Tanque. Aguanta y aplasta a los de rango.',
+    tech:{ id:'shield', name:'Escudo', cost:160, desc:'+50% HP máximo' } },
+  longbow:{ id:'longbow', name:'Longbow', ic:'🎯', cost:190, hp:240, dmg:95, rng:280, spd:0.9, type:'ranged',  count:1, splash:34, role:'Francotirador. Castiga enjambres a distancia.',
+    tech:{ id:'scope', name:'Mira láser', cost:150, desc:'+80 alcance y +25% daño' } },
+  vulcan:{  id:'vulcan',  name:'Vulcan',  ic:'🔥', cost:260, hp:360, dmg:30, rng:170, spd:1.1, type:'ranged',  count:1, splash:75, role:'Daño en área. Derrite grupos.',
+    tech:{ id:'napalm', name:'Napalm', cost:170, desc:'radio de salpicadura +80%' } },
+  titan:{   id:'titan',   name:'Titan',   ic:'🏔', cost:420, hp:2200,dmg:160,rng:120, spd:0.9, type:'heavy',   count:1, splash:40, role:'Coloso. Pozo de HP y pegada brutal.',
+    tech:{ id:'siege', name:'Asedio', cost:220, desc:'+40% daño, ignora ventajas de tipo' } },
+};
+/* Level multipliers: each level scales hp & dmg. Merge 2 same-id same-level -> +1 level. */
+function lvlMult(l){ return 1 + (l-1)*0.9; }  // L1=1x, L2=1.9x, L3=2.8x...
+const TYPE_ADV = { // attacker type -> {defender type: multiplier}
+  swarm:  { heavy:1.7, ranged:0.7, swarm:1,   assault:0.9 },
+  heavy:  { ranged:1.5, swarm:0.75,heavy:1,   assault:1.1 },
+  ranged: { swarm:1.3,  heavy:0.65,ranged:1,  assault:1 },
+  assault:{ swarm:1.1,  heavy:0.9, ranged:1.1,assault:1 },
+};
+
+/* ---------- Game state ---------- */
+const G = {
+  name:'', foeName:'RIVAL',
+  isHost:false, conn:null, peer:null,
+  round:1, gold:0, income:200,
+  winsMe:0, winsFoe:0,
+  myDeploy:[],          // units I field: {id,x,y,lvl}
+  myPending:[],         // actions this round (for undo): {kind,...}
+  myTech:{},            // {unitId:true} techs I've researched
+  foeDeploy:null,       // received at combat
+  foeTech:{},           // opponent techs
+  foeLastDeploy:null,   // opponent's deploy from the PREVIOUS round (intel)
+  foeLastTech:{},
+  mode:'place',         // 'place' | 'merge' | 'tech'
+  battleSpeed:1,        // playback speed multiplier
+  myReady:false, foeReady:false,
+  selected:null,
+  seed:0, mySeedPart:0, foeSeedPart:0,
+  W:1000, H:440,
+};
+let mergeFirst=null; // index of first unit picked for merge (declared early: newRound references it)
+
+/* ---------- DOM helpers ---------- */
+const $ = id => document.getElementById(id);
+function show(id){ document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active')); $(id).classList.add('active'); }
+function toast(msg){ const t=$('toast'); t.textContent=msg; t.style.display='block'; clearTimeout(t._t); t._t=setTimeout(()=>t.style.display='none',2200); }
+function logLine(html, cls=''){ const l=$('log'); const d=document.createElement('div'); d.className='r '+cls; d.innerHTML=html; l.appendChild(d); l.scrollTop=l.scrollHeight; }
+function setChip(on,txt){ const c=$('netChip'); c.textContent=txt; c.classList.toggle('on',on); }
+
+/* ---------- Networking (PeerJS) ---------- */
+function randCode(){ const A='ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; let s=''; for(let i=0;i<6;i++) s+=A[Math.floor(Math.random()*A.length)]; return s; }
+const PREFIX='ironsiege-v1-';
+
+function hostCreate(){
+  const name=$('playerName').value.trim();
+  if(!name){ toast('Poné tu nombre primero'); return; }
+  G.name=name; G.isHost=true;
+  const code=randCode();
+  $('roomCode').textContent=code;
+  $('createBox').style.display='block';
+  $('btnCreate').disabled=true;
+  setChip(false,'INICIANDO…');
+  G.peer=new Peer(PREFIX+code);
+  G.peer.on('open',()=> setChip(false,'SALA ABIERTA'));
+  G.peer.on('connection', c=>{ G.conn=c; wireConn(c); });
+  G.peer.on('error', e=>{
+    if(e.type==='unavailable-id'){ $('roomCode').textContent=randCode(); /*retry*/ hostRetry(); }
+    else { toast('Error de red: '+e.type); setChip(false,'ERROR'); $('btnCreate').disabled=false; }
+  });
+}
+function hostRetry(){
+  if(G.peer) G.peer.destroy();
+  const code=$('roomCode').textContent;
+  G.peer=new Peer(PREFIX+code);
+  G.peer.on('open',()=> setChip(false,'SALA ABIERTA'));
+  G.peer.on('connection', c=>{ G.conn=c; wireConn(c); });
+  G.peer.on('error', e=>{ toast('Error: '+e.type); });
+}
+
+function joinRoom(){
+  const name=$('playerName').value.trim();
+  if(!name){ toast('Poné tu nombre primero'); return; }
+  const code=$('joinCode').value.trim().toUpperCase();
+  if(code.length<4){ toast('Código inválido'); return; }
+  G.name=name; G.isHost=false;
+  $('joinStatus').textContent='Conectando…';
+  setChip(false,'CONECTANDO');
+  G.peer=new Peer();
+  G.peer.on('open',()=>{
+    const c=G.peer.connect(PREFIX+code,{reliable:true});
+    G.conn=c; wireConn(c);
+  });
+  G.peer.on('error', e=>{ $('joinStatus').textContent='No se pudo conectar ('+e.type+')'; setChip(false,'ERROR'); });
+}
+
+function wireConn(c){
+  c.on('open', ()=>{
+    setChip(true,'CONECTADO');
+    send({t:'hello', name:G.name});
+  });
+  c.on('data', onData);
+  c.on('close', ()=>{ setChip(false,'DESCONECTADO'); toast('Se cortó la conexión'); });
+}
+function send(obj){ if(G.conn && G.conn.open) G.conn.send(obj); }
+
+function onData(m){
+  switch(m.t){
+    case 'hello':
+      G.foeName=m.name||'RIVAL';
+      if(G.isHost){ // exchange seeds: host picks base seed
+        G.mySeedPart = (Math.random()*1e9)|0;
+        send({t:'seed', seed:G.mySeedPart, name:G.name});
+      }
+      break;
+    case 'seed':
+      G.foeName=m.name||G.foeName;
+      G.foeSeedPart=m.seed>>>0;
+      if(!G.isHost){
+        G.mySeedPart=(Math.random()*1e9)|0;
+        send({t:'seed2', seed:G.mySeedPart, name:G.name});
+      }
+      startMatch();
+      break;
+    case 'seed2':
+      G.foeSeedPart=m.seed>>>0;
+      G.foeName=m.name||G.foeName;
+      startMatch();
+      break;
+    case 'ready':
+      G.foeReady=true;
+      G.foeDeploy=m.deploy;
+      G.foeTech=m.tech||{};
+      $('phaseNote').textContent = G.myReady ? 'Resolviendo combate…' : 'Tu rival ya está listo. Esperándote.';
+      tryResolve();
+      break;
+    case 'rematch':
+      toast('Rival quiere seguir'); break;
+  }
+}
+
+/* ---------- Match flow ---------- */
+function startMatch(){
+  // combined deterministic seed, identical on both machines
+  G.seed = (G.mySeedPart ^ Math.imul(G.foeSeedPart,2654435761)) >>> 0;
+  G.round=1; G.gold=G.income; G.winsMe=0; G.winsFoe=0;
+  G.myDeploy=[]; G.myPending=[]; G.myTech={}; G.foeTech={};
+  $('tagMe').textContent=G.name.toUpperCase();
+  $('tagFoe').textContent=G.foeName.toUpperCase();
+  show('scrGame');
+  buildShop();
+  newRound(true);
+  logLine(`Conexión establecida. <b class="p1">${esc(G.name)}</b> vs <b class="p2">${esc(G.foeName)}</b>. ¡Que empiece el asedio!`,'win');
+}
+
+function newRound(first){
+  if(!first){ G.gold += G.income; }
+  G.myPending=[];
+  G.myReady=false; G.foeReady=false; G.foeDeploy=null; G.foeTech={};
+  G.selected=null; G.mode='place'; mergeFirst=null;
+  document.querySelectorAll('.modebar .mode').forEach(b=>b.classList.toggle('active',b.dataset.mode==='place'));
+  updateHUD();
+  renderShop();
+  drawField(null);
+  $('btnReady').disabled=false;
+  $('btnUndo').disabled=false;
+  $('phaseNote').textContent='';
+  updateSelHint();
+}
+
+function updateHUD(){
+  $('hRound').textContent=G.round;
+  $('hGold').textContent=G.gold;
+  $('hInc').textContent=G.income;
+  $('hWinMe').textContent=G.winsMe;
+  $('hWinFoe').textContent=G.winsFoe;
+}
+
+/* ---------- Shop ---------- */
+function buildShop(){
+  const shop=$('shop'); shop.innerHTML='';
+  for(const k in UNITS){
+    const u=UNITS[k];
+    const c=document.createElement('div');
+    c.className='unit-card'; c.dataset.id=k; c.style.position='relative';
+    c.innerHTML=`<button class="info-btn" data-info>ℹ</button>
+      <div class="ic">${u.ic}<span class="cnt" data-cnt></span></div>
+      <div class="nm">${u.name}</div>
+      <div class="cost" data-cost>◈ ${u.cost}${u.count>1?` ×${u.count}`:''}</div>
+      <div class="role">${u.role}</div>
+      <div class="tech-tag" data-tech>⚙ ${u.tech.name} · ${u.tech.cost}◈</div>`;
+    c.querySelector('[data-info]').onclick=(ev)=>{ ev.stopPropagation(); openUnitModal(k); };
+    c.onclick=()=>clickShop(k);
+    shop.appendChild(c);
+  }
+}
+function renderShop(){
+  document.querySelectorAll('.unit-card').forEach(c=>{
+    const k=c.dataset.id, u=UNITS[k];
+    const sel = G.selected===k;
+    c.classList.toggle('sel', sel);
+    c.style.borderColor = sel ? 'var(--phos)' : '';
+    const cntEl=c.querySelector('[data-cnt]');
+    const owned=G.myDeploy.filter(d=>d.id===k).length;
+    cntEl.textContent=owned?`×${owned}`:'';
+    const techEl=c.querySelector('[data-tech]');
+    const hasTech=!!G.myTech[k];
+    techEl.classList.toggle('has',hasTech);
+    techEl.textContent = hasTech ? `✓ ${u.tech.name} activa` : `⚙ ${u.tech.name} · ${u.tech.cost}◈`;
+    // affordability depends on mode
+    let cost = G.mode==='tech' ? u.tech.cost : u.cost;
+    let can = G.gold>=cost;
+    if(G.mode==='tech' && hasTech) can=false;
+    c.classList.toggle('cant',!can);
+  });
+}
+function clickShop(k){
+  const u=UNITS[k];
+  if(G.mode==='tech'){
+    if(G.myTech[k]){ toast('Ya la tenés'); return; }
+    if(G.gold<u.tech.cost){ toast('Créditos insuficientes'); return; }
+    G.gold-=u.tech.cost; G.myTech[k]=true;
+    G.myPending.push({kind:'tech',id:k,cost:u.tech.cost});
+    toast(`${u.tech.name} activada para ${u.name}`);
+    updateHUD(); renderShop(); drawField(null);
+    return;
+  }
+  // place or merge: pick a unit, then click field
+  if(G.mode==='place' && G.gold<u.cost){ toast('Créditos insuficientes'); return; }
+  G.selected = (G.selected===k)? null : k;
+  updateSelHint();
+  renderShop();
+}
+function updateSelHint(){
+  const h=$('selHint');
+  if(G.mode==='tech'){ h.textContent='Tocá una unidad para investigar su tecnología (afecta a todas tus unidades de ese tipo).'; return; }
+  if(!G.selected){
+    h.textContent = G.mode==='merge'
+      ? 'Elegí un tipo, luego tocá en el campo dos unidades de ese tipo e igual nivel para fusionarlas.'
+      : 'Elegí una unidad de la tienda para desplegar.';
+    return;
+  }
+  const u=UNITS[G.selected];
+  h.textContent = G.mode==='merge'
+    ? `Fusionar ${u.name}: tocá dos de tus ${u.name} del mismo nivel en el campo.`
+    : `${u.name} seleccionado · tocá tu mitad del campo para desplegar (${u.cost}◈)`;
+}
+
+/* ---------- Field / deploy ---------- */
+const field=$('field'), ctx=field.getContext('2d');
+function canvasPos(e){
+  const r=field.getBoundingClientRect();
+  const x=(e.clientX-r.left)/r.width*G.W;
+  const y=(e.clientY-r.top)/r.height*G.H;
+  return {x,y};
+}
+field.addEventListener('pointerdown', e=>{
+  const p=canvasPos(e);
+  if(G.mode==='merge'){ handleMerge(p); return; }
+  if(G.mode!=='place' || !G.selected) return;
+  if(p.y < G.H*0.52){ toast('Desplegá en tu mitad (abajo)'); return; }
+  const u=UNITS[G.selected];
+  if(G.gold<u.cost){ toast('Sin créditos'); G.selected=null; renderShop(); return; }
+  G.gold-=u.cost;
+  const entry={id:u.id,lvl:1,x:Math.max(24,Math.min(G.W-24,p.x)),y:Math.max(G.H*0.54,Math.min(G.H-20,p.y))};
+  G.myDeploy.push(entry);
+  G.myPending.push({kind:'place',entry,cost:u.cost});
+  if(G.gold<u.cost){ G.selected=null; updateSelHint(); }
+  updateHUD(); renderShop(); drawField(null);
+});
+
+function nearestMyUnit(p){
+  let best=-1,bd=900;
+  G.myDeploy.forEach((d,i)=>{ const dx=d.x-p.x,dy=d.y-p.y,dd=dx*dx+dy*dy; if(dd<bd){bd=dd;best=i;} });
+  return best;
+}
+function handleMerge(p){
+  const i=nearestMyUnit(p);
+  if(i<0){ toast('No tocaste ninguna unidad tuya'); return; }
+  const d=G.myDeploy[i];
+  if(G.selected && d.id!==G.selected){ toast(`Elegiste fusionar ${UNITS[G.selected].name}, tocá una de esas`); return; }
+  if(mergeFirst===null){
+    mergeFirst=i;
+    $('selHint').textContent=`Primera ${UNITS[d.id].name} L${d.lvl} seleccionada. Tocá otra igual (mismo nivel) para fusionar.`;
+    drawField(null,i);
+    return;
+  }
+  if(mergeFirst===i){ mergeFirst=null; updateSelHint(); drawField(null); return; }
+  const a=G.myDeploy[mergeFirst], b=G.myDeploy[i];
+  if(a.id!==b.id || a.lvl!==b.lvl){ toast('Deben ser mismo tipo y mismo nivel'); mergeFirst=null; drawField(null); return; }
+  // merge: b absorbed into a, a gains a level, position = a
+  const removed=G.myDeploy.splice(i,1)[0];
+  const idxA=G.myDeploy.indexOf(a);
+  const prevFrac=a.dmgFrac;
+  a.lvl+=1;
+  delete a.dmgFrac; // fusing repairs to full
+  G.myPending.push({kind:'merge',restore:removed,leveled:a,prevFrac});
+  toast(`${UNITS[a.id].name} subió a nivel ${a.lvl}`);
+  mergeFirst=null; updateSelHint(); updateHUD(); renderShop(); drawField(null);
+}
+
+$('btnUndo').onclick=()=>{
+  if(!G.myPending.length){ toast('Nada que deshacer esta ronda'); return; }
+  const a=G.myPending.pop();
+  if(a.kind==='place'){ const i=G.myDeploy.indexOf(a.entry); if(i>=0)G.myDeploy.splice(i,1); G.gold+=a.cost; }
+  else if(a.kind==='tech'){ G.myTech[a.id]=false; delete G.myTech[a.id]; G.gold+=a.cost; }
+  else if(a.kind==='merge'){ a.leveled.lvl-=1; if(a.prevFrac!=null)a.leveled.dmgFrac=a.prevFrac; else delete a.leveled.dmgFrac; G.myDeploy.push(a.restore); }
+  mergeFirst=null; updateHUD(); renderShop(); drawField(null);
+};
+
+// mode buttons
+document.querySelectorAll('.modebar .mode').forEach(btn=>{
+  btn.onclick=()=>{
+    if(G.myReady) return;
+    document.querySelectorAll('.modebar .mode').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    G.mode=btn.dataset.mode; G.selected=null; mergeFirst=null;
+    updateSelHint(); renderShop(); drawField(null);
+  };
+});
+
+/* ---------- Draw ---------- */
+function drawField(sim, highlightIdx){
+  ctx.clearRect(0,0,G.W,G.H);
+  // mid line + zones
+  ctx.fillStyle='rgba(255,90,77,.04)'; ctx.fillRect(0,0,G.W,G.H*0.5);
+  ctx.fillStyle='rgba(125,255,107,.04)'; ctx.fillRect(0,G.H*0.5,G.W,G.H*0.5);
+  ctx.strokeStyle='#1e2a1e'; ctx.setLineDash([6,6]); ctx.beginPath();
+  ctx.moveTo(0,G.H*0.5); ctx.lineTo(G.W,G.H*0.5); ctx.stroke(); ctx.setLineDash([]);
+
+  if(sim){
+    // beams: straight line attacker -> target (cheap, readable)
+    ctx.lineWidth=1;
+    for(const b of sim.shots){
+      ctx.strokeStyle = b.s==='me' ? 'rgba(125,255,107,.5)' : 'rgba(255,90,77,.5)';
+      ctx.beginPath(); ctx.moveTo(b.fx,b.fy); ctx.lineTo(b.tx,b.ty); ctx.stroke();
+    }
+    for(const e of sim.ents){ if(e.hp>0) drawMech(e.x,e.y,e.def,e.side,e.hp/e.maxhp,e.lvl,false); }
+  } else {
+    // enemy intel: opponent's units from LAST round, mirrored into top half (ghosted)
+    if(G.foeLastDeploy){
+      ctx.globalAlpha=0.5;
+      for(const d of G.foeLastDeploy){
+        const my=G.H-d.y; // mirror to top
+        drawMech(d.x, Math.min(G.H*0.44, my), UNITS[d.id],'foe',1,d.lvl,false);
+      }
+      ctx.globalAlpha=1;
+      ctx.fillStyle='#ff5a4d';
+      ctx.font='10px "Share Tech Mono"'; ctx.textAlign='left';
+      ctx.fillText('↑ RIVAL (ronda anterior)', 10, 14);
+      const foeTechs=Object.keys(G.foeLastTech||{}).map(k=>UNITS[k].tech.name);
+      if(foeTechs.length){
+        ctx.fillStyle='#ffb347';
+        ctx.fillText('tech rival: '+foeTechs.join(', '), 10, 28);
+      }
+    }
+    G.myDeploy.forEach((d,i)=> drawMech(d.x,d.y,UNITS[d.id],'me',d.dmgFrac!=null?d.dmgFrac:1,d.lvl, i===highlightIdx));
+  }
+}
+function drawMech(x,y,def,side,hpFrac,lvl,hl){
+  const col = side==='me' ? '#7dff6b' : '#ff5a4d';
+  const r = (def.type==='heavy'?13 : def.type==='swarm'?6 : 9) + (lvl>1?(lvl-1)*2:0);
+  ctx.save();
+  ctx.translate(x,y);
+  ctx.strokeStyle=col; ctx.fillStyle = side==='me'?'rgba(125,255,107,.12)':'rgba(255,90,77,.12)';
+  ctx.lineWidth=1.5;
+  ctx.beginPath(); ctx.rect(-r,-r,r*2,r*2); ctx.fill(); ctx.stroke();
+  if(hl){ ctx.strokeStyle='#ffb347'; ctx.lineWidth=2; ctx.strokeRect(-r-3,-r-3,r*2+6,r*2+6); }
+  ctx.fillStyle=col; ctx.font='11px "Share Tech Mono"'; ctx.textAlign='center';
+  ctx.fillText(def.ic, 0, r+12);
+  if(lvl>1){ ctx.fillStyle='#ffb347'; ctx.font='bold 10px "Chakra Petch"'; ctx.fillText('L'+lvl, 0, -r-3); }
+  if(hpFrac<1){
+    ctx.fillStyle='#2a1a1a'; ctx.fillRect(-r,-r-6,r*2,3);
+    ctx.fillStyle=col; ctx.fillRect(-r,-r-6,r*2*hpFrac,3);
+  }
+  ctx.restore();
+}
+
+/* ---------- Ready / resolve ---------- */
+$('btnReady').onclick=()=>{
+  if(G.myReady) return;
+  if(!G.myDeploy.length){ toast('Desplegá al menos una unidad'); return; }
+  G.myReady=true;
+  $('btnReady').disabled=true; $('btnUndo').disabled=true;
+  G.selected=null; renderShop();
+  send({t:'ready', deploy:G.myDeploy, tech:G.myTech});
+  $('phaseNote').textContent = G.foeReady ? 'Resolviendo combate…' : 'Despliegue confirmado. Esperando al rival…';
+  tryResolve();
+};
+
+function tryResolve(){
+  if(!(G.myReady && G.foeReady && G.foeDeploy)) return;
+  // Build entity list. Both machines build IDENTICAL input -> identical sim.
+  // My units are 'side A' for me and 'side B' for opponent, but to stay identical
+  // we order deterministically by a canonical owner key (host vs guest), not by "me".
+  const hostDeploy = G.isHost ? G.myDeploy : G.foeDeploy;
+  const guestDeploy= G.isHost ? G.foeDeploy : G.myDeploy;
+  const hostTech   = G.isHost ? G.myTech : G.foeTech;
+  const guestTech  = G.isHost ? G.foeTech : G.myTech;
+  const result = simulate(hostDeploy, guestDeploy, hostTech, guestTech, G.seed + G.round*7919);
+  playback(result);
+}
+
+/* ---------- Simulation (deterministic) ----------
+   Host units occupy BOTTOM, guest units occupy TOP in canonical space.
+   Each machine maps "side" to its own color for display.
+   Winner decided by who has units left (or more total HP on timeout).
+*/
+function expand(deploy, side, tech){
+  const ents=[];
+  deploy.forEach((d,di)=>{
+    const u=UNITS[d.id];
+    const lvl=d.lvl||1, m=lvlMult(lvl);
+    const t=!!(tech&&tech[d.id]);
+    // base stats scaled by level
+    let hp=u.hp*m, dmg=u.dmg*m, rng=u.rng, spd=u.spd;
+    let splash= u.splash||0, siege=false, cdMul=1;
+    // apply tech per unit
+    if(t){
+      switch(u.id){
+        case 'crawler': cdMul=0.625; break;              // +60% fire rate
+        case 'marauder': dmg*=1.5; rng+=40; break;
+        case 'warden': hp*=1.5; break;
+        case 'longbow': rng+=80; dmg*=1.25; break;
+        case 'vulcan': splash*=1.8; break;
+        case 'titan': dmg*=1.4; siege=true; break;
+      }
+    }
+    const startHp = d.dmgFrac!=null ? hp*d.dmgFrac : hp; // persistent damage
+    for(let i=0;i<u.count;i++){
+      const off = u.count>1 ? (i-(u.count-1)/2)*16 : 0;
+      ents.push({
+        def:u, side, id:u.id, type:u.type, lvl, di,
+        x:d.x+off, y:side==='host'? d.y : (G.H-d.y),
+        hp:startHp, maxhp:hp, dmg, rng, spd, splash, siege, cdMul,
+        cd:0,
+      });
+    }
+  });
+  return ents;
+}
+function simulate(hostDeploy, guestDeploy, hostTech, guestTech, seed){
+  const rng=makeRNG(seed);
+  const ents=[...expand(hostDeploy,'host',hostTech), ...expand(guestDeploy,'guest',guestTech)];
+  // stable sort for determinism
+  ents.forEach((e,i)=>e._o=i);
+  const frames=[];
+  const MAXT=900;
+  for(let t=0;t<MAXT;t++){
+    const shots=[];
+    // acquire targets + act
+    for(const e of ents){
+      if(e.hp<=0) continue;
+      let best=null,bd=1e9;
+      for(const o of ents){
+        if(o.hp<=0||o.side===e.side) continue;
+        const dx=o.x-e.x,dy=o.y-e.y,d=Math.sqrt(dx*dx+dy*dy);
+        if(d<bd){bd=d;best=o;}
+      }
+      if(!best) continue;
+      if(bd>e.rng){
+        const dx=best.x-e.x,dy=best.y-e.y,d=bd||1;
+        e.x+=dx/d*e.spd*1.6; e.y+=dy/d*e.spd*1.6;
+      } else {
+        e.cd--;
+        if(e.cd<=0){
+          const adv = e.siege ? 1 : ((TYPE_ADV[e.type]&&TYPE_ADV[e.type][best.type])||1);
+          const variance=0.9+rng()*0.2;
+          let dealt=e.dmg*adv*variance;
+          best.hp-=dealt;
+          if(e.splash>0){
+            const rr=e.splash*e.splash;
+            for(const o of ents){ if(o.hp>0&&o.side!==e.side&&o!==best){
+              const dx=o.x-best.x,dy=o.y-best.y; if(dx*dx+dy*dy<rr) o.hp-=dealt*0.6;
+            }}
+          }
+          const baseCd = e.id==='crawler'?8 : e.id==='longbow'?34 : e.id==='titan'?28 : 16;
+          e.cd = Math.max(2, Math.round(baseCd*e.cdMul));
+          shots.push({fx:e.x,fy:e.y,tx:best.x,ty:best.y,side:e.side});
+        }
+      }
+    }
+    // record frames (every 2 ticks) — denser = smoother, longer battle
+    if(t%2===0){
+      frames.push({ents:ents.map(e=>({x:e.x,y:e.y,hp:e.hp,maxhp:e.maxhp,def:e.def,side:e.side,lvl:e.lvl})), shots:shots.slice(0,30)});
+    }
+    const hostAlive=ents.some(e=>e.hp>0&&e.side==='host');
+    const guestAlive=ents.some(e=>e.hp>0&&e.side==='guest');
+    if(!hostAlive||!guestAlive) break;
+  }
+  const hostHP=ents.filter(e=>e.side==='host').reduce((s,e)=>s+Math.max(0,e.hp),0);
+  const guestHP=ents.filter(e=>e.side==='guest').reduce((s,e)=>s+Math.max(0,e.hp),0);
+  let winner = hostHP>guestHP?'host':(guestHP>hostHP?'guest':'draw');
+  // survival fraction per deploy entry (for persistent damage next round)
+  function survival(side){
+    const map={};
+    for(const e of ents){ if(e.side!==side) continue;
+      if(!map[e.di]) map[e.di]={hp:0,max:0};
+      map[e.di].hp+=Math.max(0,e.hp); map[e.di].max+=e.maxhp;
+    }
+    return map; // {di:{hp,max}}
+  }
+  return {frames, winner, hostHP:Math.round(hostHP), guestHP:Math.round(guestHP),
+          hostSurv:survival('host'), guestSurv:survival('guest')};
+}
+
+/* ---------- Playback animation ---------- */
+let pbTimer=null;
+const PB_BASE=46; // ms per frame at 1x (higher = slower battle)
+function playback(result){
+  let i=0;
+  const myColorSide = G.isHost?'host':'guest';
+  $('phaseNote').textContent='⚔ COMBATE EN CURSO · usá VELOCIDAD para acelerar';
+  function tick(){
+    if(i>=result.frames.length){ clearInterval(pbTimer); pbTimer=null; finishRound(result,myColorSide); return; }
+    const f=result.frames[i++];
+    const simView={
+      ents:f.ents.map(e=>({x:e.x,y:e.y,hp:e.hp,maxhp:e.maxhp,def:e.def,lvl:e.lvl, side: e.side===myColorSide?'me':'foe'})),
+      shots:f.shots.map(b=>({fx:b.fx,fy:b.fy,tx:b.tx,ty:b.ty, s: b.side===myColorSide?'me':'foe'}))
+    };
+    drawField(simView);
+  }
+  startPbTimer(tick);
+  G._pbTick=tick; // keep ref so speed change can restart interval
+}
+function startPbTimer(tick){
+  if(pbTimer) clearInterval(pbTimer);
+  pbTimer=setInterval(tick, PB_BASE/G.battleSpeed);
+}
+// speed controls
+document.querySelectorAll('.speed .spd').forEach(b=>{
+  b.onclick=()=>{
+    document.querySelectorAll('.speed .spd').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active');
+    G.battleSpeed=parseFloat(b.dataset.spd);
+    if(pbTimer && G._pbTick) startPbTimer(G._pbTick); // apply live
+  };
+});
+
+function finishRound(result, myColorSide){
+  let iWon;
+  if(result.winner==='draw') iWon=null;
+  else iWon = (result.winner===myColorSide);
+  const myHP = myColorSide==='host'?result.hostHP:result.guestHP;
+  const foeHP= myColorSide==='host'?result.guestHP:result.hostHP;
+
+  if(iWon===true){ G.winsMe++; logLine(`Ronda ${G.round}: <b class="p1">${esc(G.name)}</b> gana. HP restante ${myHP} vs ${foeHP}.`,'win'); }
+  else if(iWon===false){ G.winsFoe++; logLine(`Ronda ${G.round}: <b class="p2">${esc(G.foeName)}</b> gana. HP restante ${foeHP} vs ${myHP}.`,'win'); }
+  else logLine(`Ronda ${G.round}: empate técnico (${myHP} vs ${foeHP}).`,'win');
+
+  updateHUD();
+
+  // match end?
+  if(G.winsMe>=3||G.winsFoe>=3){
+    const champ = G.winsMe>=3?G.name:G.foeName;
+    const cls = G.winsMe>=3?'p1':'p2';
+    logLine(`★ FIN DEL ASEDIO ★ Comandante <b class="${cls}">${esc(champ)}</b> conquista (${G.winsMe}–${G.winsFoe}).`,'win');
+    $('phaseNote').textContent='Partida terminada. Recargá para jugar otra.';
+    $('btnReady').disabled=true; $('btnUndo').disabled=true;
+    toast(G.winsMe>=3?'¡GANASTE EL ASEDIO!':'Perdiste el asedio');
+    return;
+  }
+
+  // save opponent's deploy as intel for next round's planning
+  G.foeLastDeploy = G.foeDeploy ? JSON.parse(JSON.stringify(G.foeDeploy)) : null;
+  G.foeLastTech = Object.assign({}, G.foeTech);
+
+  // PERSISTENT DAMAGE: survivors carry their remaining HP into next round.
+  // My survival comes from the same deterministic sim both machines ran.
+  const mySurv = myColorSide==='host' ? result.hostSurv : result.guestSurv;
+  const kept=[]; let destroyed=0;
+  G.myDeploy.forEach((d,di)=>{
+    const s=mySurv[di];
+    const frac = s && s.max>0 ? s.hp/s.max : 0;
+    if(frac>0.02){ d.dmgFrac=Math.min(1,frac); kept.push(d); }
+    else destroyed++;
+  });
+  G.myDeploy=kept;
+  if(destroyed>0) logLine(`  ${destroyed} unidad(es) tuyas fueron destruidas. Las supervivientes vuelven dañadas.`,'');
+
+  // next round: survivors stay on YOUR board (damaged), income grows
+  G.round++;
+  G.income+=80;
+  toast(iWon===true?'Ronda ganada':iWon===false?'Ronda perdida':'Empate');
+  setTimeout(()=>{ newRound(false); $('phaseNote').textContent=`Ronda ${G.round}. +${G.income}◈ de ingreso. Supervivientes dañados en campo.`; }, 1400);
+}
+
+/* ---------- Unit info modal ---------- */
+const TYPE_LABEL={swarm:'ENJAMBRE',heavy:'PESADO',ranged:'RANGO',assault:'ASALTO'};
+const TYPE_DESC={
+  swarm:'Muchos cuerpos baratos. Fuerte contra PESADO, débil contra RANGO.',
+  heavy:'Blindaje y pegada. Fuerte contra RANGO, débil contra ENJAMBRE.',
+  ranged:'Daño a distancia y área. Fuerte contra ENJAMBRE, débil contra PESADO.',
+  assault:'Generalista equilibrado. Sin ventaja ni debilidad marcada.'
+};
+function advLines(type){
+  const row=TYPE_ADV[type]||{};
+  const parts=[];
+  for(const d in row){
+    if(d===type) continue;
+    const m=row[d];
+    if(m>1.05) parts.push(`<span class="good">▲ +${Math.round((m-1)*100)}% vs ${TYPE_LABEL[d]}</span>`);
+    else if(m<0.95) parts.push(`<span class="bad">▼ ${Math.round((m-1)*100)}% vs ${TYPE_LABEL[d]}</span>`);
+  }
+  return parts.join('<br>')||'Sin modificadores de tipo relevantes.';
+}
+function openUnitModal(k){
+  const u=UNITS[k];
+  const owned=G.myDeploy.filter(d=>d.id===k);
+  const maxLvl=owned.reduce((m,d)=>Math.max(m,d.lvl),0);
+  const l2=lvlMult(2), l3=lvlMult(3);
+  const hasTech=!!G.myTech[k];
+  const cad = u.id==='crawler'?8 : u.id==='longbow'?34 : u.id==='titan'?28 : 16;
+  $('modalContent').innerHTML=`
+    <div class="m-head">
+      <div class="m-ic">${u.ic}</div>
+      <div>
+        <div class="m-name">${u.name}</div>
+        <div class="m-type">${TYPE_LABEL[u.type]}${u.count>1?` · sale de a ${u.count}`:''}</div>
+      </div>
+    </div>
+    <div class="m-role">${u.role}</div>
+    <div class="m-stats">
+      <div class="m-stat"><span class="k">Vida</span><span class="v">${u.hp}</span></div>
+      <div class="m-stat"><span class="k">Daño</span><span class="v">${u.dmg}</span></div>
+      <div class="m-stat"><span class="k">Alcance</span><span class="v">${u.rng}</span></div>
+      <div class="m-stat"><span class="k">Velocidad</span><span class="v">${u.spd}</span></div>
+      <div class="m-stat"><span class="k">Cadencia</span><span class="v">${cad<12?'rápida':cad>26?'lenta':'media'}</span></div>
+      <div class="m-stat"><span class="k">Área</span><span class="v">${u.splash?('sí ('+u.splash+')'):'no'}</span></div>
+      <div class="m-stat"><span class="k">Costo</span><span class="v">◈ ${u.cost}</span></div>
+      <div class="m-stat"><span class="k">En campo</span><span class="v">${owned.length}${maxLvl>1?` (máx L${maxLvl})`:''}</span></div>
+    </div>
+    <div class="m-block">
+      <h4>VENTAJAS DE TIPO</h4>
+      <div class="m-adv">${advLines(u.type)}</div>
+    </div>
+    <div class="m-block">
+      <h4>NIVELES (fusión)</h4>
+      <p>Fusionando dos iguales del mismo nivel sube +1 nivel. Escala vida y daño:
+      L2 ≈ ×${l2.toFixed(1)} (${Math.round(u.hp*l2)} vida / ${Math.round(u.dmg*l2)} daño),
+      L3 ≈ ×${l3.toFixed(1)} (${Math.round(u.hp*l3)} vida / ${Math.round(u.dmg*l3)} daño).</p>
+    </div>
+    <div class="m-block">
+      <h4>TECNOLOGÍA · ${u.tech.name} ${hasTech?'✓ activa':'('+u.tech.cost+'◈)'}</h4>
+      <p>${u.tech.desc}. Afecta a todas tus ${u.name} y se mantiene toda la partida.</p>
+    </div>`;
+  $('modalBg').classList.add('show');
+}
+function closeModal(){ $('modalBg').classList.remove('show'); }
+
+/* ---------- utils ---------- */
+function esc(s){ return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+/* ---------- wire lobby ---------- */
+$('btnCreate').onclick=hostCreate;
+$('btnJoin').onclick=joinRoom;
+$('roomCode').onclick=()=>{ navigator.clipboard?.writeText($('roomCode').textContent); toast('Código copiado'); };
+$('joinCode').addEventListener('input',e=>e.target.value=e.target.value.toUpperCase());
+window.addEventListener('resize',()=>drawField(null));
+$('modalX').onclick=closeModal;
+$('modalBg').onclick=(e)=>{ if(e.target===$('modalBg')) closeModal(); };
+document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeModal(); });
+</script>
+</body>
+</html>
