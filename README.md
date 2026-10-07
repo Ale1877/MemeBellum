@@ -11,12 +11,10 @@ Partida al mejor de 5 (gana quien llega a 3 rondas). Cada ronda:
 1. **Planificás** (90 s la primera, 60 s las siguientes): desplegás mechas con créditos, los **movés**, los **fusionás**
    (dos iguales del mismo nivel → +1 nivel) o investigás **tecnologías** por unidad.
 2. Confirmás **LISTO**. Cuando los dos confirman, el combate se simula y se reproduce (velocidad 0,5×–4×).
-3. **Todas tus unidades reaparecen** en la ronda siguiente, en su posición: las destruidas vuelven a pleno HP y las que sobrevivieron
-   conservan el daño que recibieron (constante `PERSIST_DAMAGE`; con `false` todas vuelven a pleno HP). Un escuadrón (p. ej. Crawlers)
-   vuelve entero con el promedio de sus miembros, contando a los destruidos como sanos. Ves además el despliegue y las techs del rival
-   de la ronda anterior (intel).
-
-Triángulo de contras: **enjambre > pesado > rango > enjambre**; el asalto es generalista (`TYPE_ADV` en el código).
+3. **Tu ejército se restaura completo** (como en Mechabellum): todas tus unidades reaparecen en la ronda siguiente, en su posición y
+   **a pleno HP**, hayan sido destruidas o sobrevivido. Lo que decide el rumbo de la partida es qué desplegás, no el desgaste. Ves además
+   el despliegue y las techs del rival de la ronda anterior (intel). (`PERSIST_DAMAGE` en el código; con `true` los supervivientes
+   conservarían el daño, pero no es la regla actual.)
 
 ### Modos
 - **Buscar partida rápida**: cola abierta sin servidor propio (ver *Matchmaking* abajo).

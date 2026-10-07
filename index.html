@@ -453,7 +453,7 @@ const TYPE_ADV = { // attacker type -> {defender type: multiplier}
 
 /* ---------- Game state ---------- */
 const INCOME_START=200;
-const PERSIST_DAMAGE=true;   // survivors keep their damage between rounds (false: everyone comes back at full HP)
+const PERSIST_DAMAGE=false;  // Mechabellum rules: the whole army is restored to full HP every round. (true: survivors would keep their damage)
 const G = {
   name:'', foeName:'RIVAL',
   isHost:false, conn:null, peer:null,
@@ -1922,10 +1922,10 @@ function finishRound(result, myColorSide){
   G.foeLastDeploy = G.foeDeploy ? JSON.parse(JSON.stringify(G.foeDeploy)) : null;
   G.foeLastTech = Object.assign({}, G.foeTech);
 
-  // RESPAWN (Mechabellum style): every unit you deployed is back next round at its position. Destroyed
-  // ones return at full HP; survivors keep the damage they took (PERSIST_DAMAGE). Squads (e.g. Crawlers)
-  // come back as a whole with the average of their members (destroyed members counting as full HP), so a
-  // squad that lost most of its members is never worse off than one that was wiped out.
+  // RESPAWN / RESTORE (Mechabellum rules): your whole army is back next round at its deployed positions at FULL HP,
+  // whether units were destroyed or survived (PERSIST_DAMAGE=false). If PERSIST_DAMAGE were true, destroyed units would
+  // respawn at full HP and survivors would keep their damage; squads (e.g. Crawlers) would come back as a whole with the
+  // average of their members (destroyed ones counting as full HP).
   // My numbers come from the same deterministic sim both machines ran.
   const mySurv = myColorSide==='host' ? result.hostSurv : result.guestSurv;
   let destroyed=0, hurt=0; G.respawned=new WeakSet();
@@ -1937,13 +1937,14 @@ function finishRound(result, myColorSide){
     frac=Math.min(1,Math.max(0.02,Math.round(frac*1000)/1000));         // 0.1% steps keep replays compact; >=2% so peers' sanitizer agrees
     if(frac>=0.999) delete d.dmgFrac; else { d.dmgFrac=frac; if(!wiped) hurt++; }
   });
-  if(destroyed>0) logLine(`  ${destroyed} de tus unidades fueron destruidas: reaparecen en la próxima ronda.`+(hurt?' Las que sobrevivieron conservan el daño.':''),'');
+  if(destroyed>0) logLine(`  ${destroyed===1?'1 de tus unidades fue destruida':destroyed+' de tus unidades fueron destruidas'}: reaparece${destroyed===1?'':'n'} en la próxima ronda.`+(PERSIST_DAMAGE?(hurt?' Las que sobrevivieron conservan el daño.':''):' Todo tu ejército vuelve a pleno HP.'),'');
+  else if(PERSIST_DAMAGE===false && G.myDeploy.length) logLine('  Tu ejército se restaura por completo para la próxima ronda.','');
 
   // next round: survivors stay on YOUR board (damaged), income grows
   G.round++;
   G.income+=80;
   toast(iWon===true?'Ronda ganada':iWon===false?'Ronda perdida':'Empate');
-  G._nrTimer=setTimeout(()=>{ if(G.phase!=='between') return; newRound(false); showBanner('RONDA '+G.round,'info',`+${G.income}◈ de ingreso`); $('phaseNote').textContent=`Ronda ${G.round}. +${G.income}◈ de ingreso. Tus unidades destruidas reaparecieron.`; respawnFx(); }, 1400);
+  G._nrTimer=setTimeout(()=>{ if(G.phase!=='between') return; newRound(false); showBanner('RONDA '+G.round,'info',`+${G.income}◈ de ingreso`); $('phaseNote').textContent=`Ronda ${G.round}. +${G.income}◈ de ingreso. Tu ejército se restauró por completo.`; respawnFx(); }, 1400);
 }
 
 /* ---------- Battle summary (from the deterministic sim's statistics) ---------- */
@@ -1988,10 +1989,10 @@ function renderSummary(sum, round){
   if(sum.mvp){ const u=UNITS[sum.mvp.id]; box.appendChild(el('div','mvp',`★ MVP: ${u.ic} ${u.name} (${sum.mvp.side==='me'?G.name:G.foeName}) · ${sum.mvp.dealt} daño · ${sum.mvp.kills} bajas`)); }
   box.hidden=false;
 }
-// ring + blip on every unit that was destroyed last round and just came back
+// ring on every unit of the restored army (amber on the ones that had been destroyed)
 function respawnFx(){
   if(!G.respawned) return;
-  for(const d of G.myDeploy) if(G.respawned.has(d)) fxPlace(d.x*V.sx,d.y*V.sy,0);
+  for(const d of G.myDeploy) fxPlace(d.x*V.sx,d.y*V.sy,G.respawned.has(d)?2:0);   // whole army restored; destroyed ones glow amber
   G.respawned=null;
 }
 function hideSummary(){ const b=$('summary'); if(b) b.hidden=true; }

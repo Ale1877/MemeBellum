@@ -12,7 +12,8 @@ Se publica como sitio estático (Cloudflare Pages). Ver `README.md` para la arqu
 - **Triángulo de contras** (enjambre > pesado > rango > enjambre): si tocás stats/costos, verificá con
   `node tests/run.js --report` y con una semilla distinta a la usada para ajustar.
 - **Sin servidor propio ni infraestructura paga.** Todo entrante (red, enlaces de replay) se sanea.
-- Mantener: niveles por fusión, tecnologías por unidad, daño persistente entre rondas, intel del rival, velocidad 0.5×–4×, modal de stats.
+- Reglas estilo Mechabellum: **el ejército completo se restaura a pleno HP cada ronda** (destruidas y supervivientes; `PERSIST_DAMAGE=false`).
+- Mantener: niveles por fusión, tecnologías por unidad, intel del rival, velocidad 0.5×–4×, modal de stats.
 - Mantener el proyecto como **un solo `index.html`** salvo acuerdo explícito.
 
 ## Flujo de trabajo
@@ -30,5 +31,5 @@ Tests: `tests/run.js` (suite), `load.js` (carga el script con DOM falso), `net.j
 
 ## Trampas conocidas
 - `G.phase` gobierna qué mensajes de red se aplican (`lobby|plan|battle|between|over|replay`); un `ready` adelantado se bufferea.
-- Posiciones y HP arrastrado están cuantizados (0,1 px / 0,1 %) para que los replays sean compactos: no los desquantices.
+- Posiciones (y el HP arrastrado, si se reactiva `PERSIST_DAMAGE`) están cuantizados (0,1 px / 0,1 %) para que los replays sean compactos: no los desquantices.
 - Las pruebas con `Date.now()` real no funcionan con el reloj falso: usar `nowMs()`.

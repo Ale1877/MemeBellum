@@ -773,8 +773,14 @@ pending.push((async () => {
     if (H.G.myDeploy.length !== n0[0] || Gu.G.myDeploy.length !== n0[1]) fail.push(`B: el ejército se achicó (${n0} -> ${H.G.myDeploy.length},${Gu.G.myDeploy.length}): las destruidas no reaparecieron`);
     const log0 = p.log.host[0];
     if (log0.winner === 'draw') fail.push('B: la ronda 1 debía tener un ganador');
-    // los 'dmgFrac' son válidos: entre 0.02 y 1, y el que ganó solo tiene daño arrastrado, no unidades perdidas
-    for (const m of [H, Gu]) for (const d of m.G.myDeploy) if (d.dmgFrac !== undefined && !(d.dmgFrac >= 0.02 && d.dmgFrac < 1)) fail.push('B: dmgFrac inválido ' + d.dmgFrac);
+    // reglas Mechabellum: TODO el ejército vuelve a pleno HP (destruidas y supervivientes), sin daño arrastrado
+    if (H.PERSIST_DAMAGE !== false) fail.push('B: PERSIST_DAMAGE debe ser false (todo el ejército se restaura)');
+    for (const [n, m] of [['host', H], ['guest', Gu]]) {
+      for (const d of m.G.myDeploy) if (d.dmgFrac !== undefined) fail.push(`B: ${n} arrastra daño (${d.dmgFrac}): debía volver a pleno HP`);
+      const ents = m.expand(m.G.myDeploy, 'host', {});
+      if (ents.some(e => e.hp !== e.maxhp)) fail.push(`B: ${n} tiene unidades que no empiezan la ronda a pleno HP`);
+    }
+    if (p.log.host[0].hostHP >= 0 && Math.min(p.log.host[0].hostHP, p.log.host[0].guestHP) > 0) fail.push('B: la ronda 1 debía dejar un bando sin HP (para probar que el ganador también se restaura)');
     // ronda 2 sin comprar nada: se puede confirmar y ambas máquinas simulan lo mismo
     H.confirmReady(); p.pump(); Gu.confirmReady(); p.pump();
     if (H.G.phase !== 'battle' || Gu.G.phase !== 'battle') fail.push('B: no se pudo jugar la ronda 2 con las unidades que reaparecieron');
@@ -783,7 +789,7 @@ pending.push((async () => {
     // lo grabado en el replay coincide en ambos lados (incluye los dmgFrac arrastrados)
     if (JSON.stringify(H.Rec.cur.rounds) !== JSON.stringify(Gu.Rec.cur.rounds)) fail.push('B: el replay grabó entradas distintas en host y guest'); }
 
-  check('respawn: destruidas reaparecen a pleno HP, supervivientes conservan daño, ejército intacto y misma simulación', fail.length === 0, fail.slice(0, 4).join('; '));
+  check('respawn estilo Mechabellum: todo el ejército (destruidas y supervivientes) vuelve a pleno HP, intacto y con la misma simulación', fail.length === 0, fail.slice(0, 4).join('; '));
 }
 
 // --report: tabla de winrates entre todos los tipos y unidades
