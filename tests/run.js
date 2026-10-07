@@ -223,6 +223,29 @@ for (const budget of TRI_BUDGETS) for (const [a, b] of TRI) {
   check('conexión: heartbeat, corte, volver al lobby, sala ocupada', fail.length === 0, fail.join('; '));
 }
 
+// (h) vista: cada jugador ve SU ejército abajo durante el combate (el guest se voltea solo al dibujar)
+{
+  const { makePair, handshake } = require('./net');
+  const p = makePair(); handshake(p);
+  const fail = [];
+  p.host.G.myDeploy.push({ id: 'warden', lvl: 1, x: 300, y: 400 }, { id: 'marauder', lvl: 1, x: 700, y: 380 });
+  p.guest.G.myDeploy.push({ id: 'warden', lvl: 1, x: 500, y: 410 }, { id: 'longbow', lvl: 1, x: 200, y: 390 });
+  p.host.confirmReady(); p.pump(); p.guest.confirmReady(); p.pump();
+  p.clock.advance(300);
+  for (const who of ['host', 'guest']) {
+    const first = p.log.views[who][0];
+    if (!first) { fail.push(who + ': no se dibujó ningún frame'); continue; }
+    const mine = first.ents.filter(e => e.side === 'me'), foe = first.ents.filter(e => e.side === 'foe');
+    if (!mine.length || !foe.length) fail.push(who + ': faltan unidades en el primer frame');
+    if (mine.some(e => e.y < 220)) fail.push(who + ': su ejército aparece arriba');
+    if (foe.some(e => e.y > 220)) fail.push(who + ': el rival aparece abajo');
+  }
+  // y las posiciones de mi ejército en el primer frame coinciden con mi despliegue
+  const g0 = p.log.views.guest[0].ents.filter(e => e.side === 'me').map(e => e.y).sort((a, b) => a - b);
+  if (g0.length !== 2 || Math.abs(g0[0] - 390) > 6 || Math.abs(g0[1] - 410) > 6) fail.push('el guest no ve sus unidades donde las desplegó: ' + g0.map(Math.round).join());
+  check('vista: cada jugador ve su ejército abajo en el combate', fail.length === 0, fail.join('; '));
+}
+
 // --report: tabla de winrates entre todos los tipos y unidades
 if (process.argv.includes('--report')) {
   console.log('\nTriángulo por presupuesto (% victorias del que debería ganar):');

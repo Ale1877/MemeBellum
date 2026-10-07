@@ -37,6 +37,11 @@ function makePair() {
     const real = l.ctx.simulate;
     l.ctx.simulate = (...a) => { const r = real(...a); log[who].push({ winner: r.winner, hostHP: r.hostHP, guestHP: r.guestHP }); return r; };
   }
+  log.views = { host: [], guest: [] };                  // cada frame dibujado en combate (simView)
+  for (const [who, l] of [['host', hl], ['guest', gl]]) {
+    const real = l.ctx.drawField;
+    l.ctx.drawField = (sim, ...r) => { if (sim) log.views[who].push(sim); return real(sim, ...r); };
+  }
   for (const [who, l] of [['host', hl], ['guest', gl]]) {
     const real = l.ctx.connectionLost;
     l.ctx.connectionLost = (...a) => { log.lost[who]++; return real(...a); };

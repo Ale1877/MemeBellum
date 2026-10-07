@@ -922,12 +922,15 @@ function playback(result){
   let i=0;
   const myColorSide = G.isHost?'host':'guest';
   $('phaseNote').textContent='⚔ COMBATE EN CURSO · usá VELOCIDAD para acelerar';
+  // The sim is canonical (host bottom, guest top). Each player must see THEIR army at the
+  // bottom, as they deployed it, so the guest's view is flipped vertically (draw-only).
+  const vy = y => G.isHost ? y : G.H-y;
   function tick(){
     if(i>=result.frames.length){ clearInterval(pbTimer); pbTimer=null; finishRound(result,myColorSide); return; }
     const f=result.frames[i++];
     const simView={
-      ents:f.ents.map(e=>({x:e.x,y:e.y,hp:e.hp,maxhp:e.maxhp,def:e.def,lvl:e.lvl, side: e.side===myColorSide?'me':'foe'})),
-      shots:f.shots.map(b=>({fx:b.fx,fy:b.fy,tx:b.tx,ty:b.ty, s: b.side===myColorSide?'me':'foe'}))
+      ents:f.ents.map(e=>({x:e.x,y:vy(e.y),hp:e.hp,maxhp:e.maxhp,def:e.def,lvl:e.lvl, side: e.side===myColorSide?'me':'foe'})),
+      shots:f.shots.map(b=>({fx:b.fx,fy:vy(b.fy),tx:b.tx,ty:vy(b.ty), s: b.side===myColorSide?'me':'foe'}))
     };
     drawField(simView);
   }
