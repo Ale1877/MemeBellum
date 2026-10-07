@@ -285,17 +285,17 @@ function makeRNG(seed){
    assault is balanced generalist.
 */
 const UNITS = {
-  crawler:{ id:'crawler', name:'Crawler', ic:'🕷', cost:60,  hp:75,  dmg:16, rng:58,  spd:2.4, type:'swarm',   count:4, role:'Enjambre barato. Rompe blancos pesados.',
+  crawler:{ id:'crawler', name:'Crawler', ic:'🕷', cost:60,  hp:75,  dmg:16, rng:58,  spd:2.4, cd:8, type:'swarm',   count:4, role:'Enjambre barato. Rompe blancos pesados.',
     tech:{ id:'frenzy', name:'Frenesí', cost:90, desc:'+60% cadencia de disparo' } },
-  marauder:{id:'marauder',name:'Marauder',ic:'🤖', cost:120, hp:320, dmg:42, rng:95,  spd:1.5, type:'assault', count:1, role:'Soldado versátil. Sin debilidad clara.',
+  marauder:{id:'marauder',name:'Marauder',ic:'🤖', cost:120, hp:320, dmg:42, rng:95,  spd:1.5, cd:16, type:'assault', count:1, role:'Soldado versátil. Sin debilidad clara.',
     tech:{ id:'rockets', name:'Cohetes', cost:130, desc:'+50% daño y +40 alcance' } },
-  warden:{  id:'warden',  name:'Warden',  ic:'🛡', cost:200, hp:1000,dmg:62, rng:72,  spd:1.0, type:'heavy',   count:1, role:'Tanque. Aguanta y aplasta a los de rango.',
+  warden:{  id:'warden',  name:'Warden',  ic:'🛡', cost:200, hp:1000,dmg:62, rng:72,  spd:1.0, cd:16, type:'heavy',   count:1, role:'Tanque. Aguanta y aplasta a los de rango.',
     tech:{ id:'shield', name:'Escudo', cost:160, desc:'+50% HP máximo' } },
-  longbow:{ id:'longbow', name:'Longbow', ic:'🎯', cost:190, hp:240, dmg:95, rng:280, spd:0.9, type:'ranged',  count:1, splash:34, role:'Francotirador. Castiga enjambres a distancia.',
+  longbow:{ id:'longbow', name:'Longbow', ic:'🎯', cost:190, hp:240, dmg:95, rng:280, spd:0.9, cd:34, type:'ranged',  count:1, splash:34, role:'Francotirador. Castiga enjambres a distancia.',
     tech:{ id:'scope', name:'Mira láser', cost:150, desc:'+80 alcance y +25% daño' } },
-  vulcan:{  id:'vulcan',  name:'Vulcan',  ic:'🔥', cost:260, hp:360, dmg:30, rng:170, spd:1.1, type:'ranged',  count:1, splash:75, role:'Daño en área. Derrite grupos.',
+  vulcan:{  id:'vulcan',  name:'Vulcan',  ic:'🔥', cost:260, hp:360, dmg:30, rng:170, spd:1.1, cd:16, type:'ranged',  count:1, splash:75, role:'Daño en área. Derrite grupos.',
     tech:{ id:'napalm', name:'Napalm', cost:170, desc:'radio de salpicadura +80%' } },
-  titan:{   id:'titan',   name:'Titan',   ic:'🏔', cost:420, hp:2200,dmg:160,rng:120, spd:0.9, type:'heavy',   count:1, splash:40, role:'Coloso. Pozo de HP y pegada brutal.',
+  titan:{   id:'titan',   name:'Titan',   ic:'🏔', cost:420, hp:2200,dmg:160,rng:120, spd:0.9, cd:28, type:'heavy',   count:1, splash:40, role:'Coloso. Pozo de HP y pegada brutal.',
     tech:{ id:'siege', name:'Asedio', cost:220, desc:'+40% daño, ignora ventajas de tipo' } },
 };
 /* Level multipliers: each level scales hp & dmg. Merge 2 same-id same-level -> +1 level. */
@@ -886,8 +886,7 @@ function simulate(hostDeploy, guestDeploy, hostTech, guestTech, seed){
               const dx=o.x-best.x,dy=o.y-best.y; if(dx*dx+dy*dy<rr) o.hp-=dealt*0.6;
             }}
           }
-          const baseCd = e.id==='crawler'?8 : e.id==='longbow'?34 : e.id==='titan'?28 : 16;
-          e.cd = Math.max(2, Math.round(baseCd*e.cdMul));
+          e.cd = Math.max(2, Math.round(e.def.cd*e.cdMul));
           shots.push({fx:e.x,fy:e.y,tx:best.x,ty:best.y,side:e.side});
         }
       }
@@ -1025,7 +1024,7 @@ function openUnitModal(k){
   const maxLvl=owned.reduce((m,d)=>Math.max(m,d.lvl),0);
   const l2=lvlMult(2), l3=lvlMult(3);
   const hasTech=!!G.myTech[k];
-  const cad = u.id==='crawler'?8 : u.id==='longbow'?34 : u.id==='titan'?28 : 16;
+  const cad = u.cd;
   $('modalContent').innerHTML=`
     <div class="m-head">
       <div class="m-ic">${u.ic}</div>
