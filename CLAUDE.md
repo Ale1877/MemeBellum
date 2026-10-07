@@ -18,6 +18,7 @@ Se publica como sitio estático (Cloudflare Pages). Ver `README.md` para la arqu
   se valida con ellas en `applyFoeReady`: desbloqueo fuera de la oferta o unidad no desbloqueada ⇒ rechazo. Los tests desbloquean todo por defecto
   (`handshake`/`makeNetPair`, salvo `keepLocks`). Agregar una unidad: entrada en `UNITS` (con `fx` de una familia existente), caso de tecnología en `expand`, balancearla
   (`tools/balance-search.js` con `FOCUS=id`) y subir `SIM_VERSION`.
+- **Fin de partida y ranking**: al terminar, `showEndScreen` ofrece BUSCAR OTRA PARTIDA / REVANCHA / MENÚ; `scoreMatch` suma 3 pts por victoria y 1 por empate en `localStorage` (`ironsiege.scores`), por nombre sin distinguir mayúsculas, una vez por partida (`G.scored`); vs bot no suma. Salir de una partida online en curso con el botón cuenta como derrota (`abandonMatch`). Es local al navegador: sin servidor no hay ranking global. Nombres = entrada hostil (tabla sin prototipo, saneada).
 - Mantener: niveles por fusión, tecnologías por unidad, intel del rival, velocidad 0.5×–4×, modal de stats.
 - Mantener el proyecto como **un solo `index.html`** salvo acuerdo explícito.
 

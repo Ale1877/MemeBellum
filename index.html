@@ -160,6 +160,16 @@
   .modal .m-adv{font-size:11px;line-height:1.7;margin-top:4px}
   .modal .m-adv .good{color:var(--phos)}
   .modal .m-adv .bad{color:var(--red)}
+  .endscreen{text-align:center}
+  .endscreen .end-title{font-family:var(--disp);font-weight:700;font-size:32px;letter-spacing:4px;color:var(--phos)}
+  .endscreen.lose .end-title{color:var(--red)} .endscreen.draw .end-title{color:var(--amber)}
+  .endscreen .end-line{font-size:13px;color:var(--ink-dim);margin:6px 0}
+  .endscreen .end-score{border:1px solid var(--line);padding:10px;margin:12px 0;font-size:12px;line-height:1.6}
+  .endscreen button{margin-top:8px}
+  .score-list{list-style:none;margin:8px 0;padding:0;font-size:12px}
+  .score-list li{display:flex;justify-content:space-between;gap:8px;border-bottom:1px solid var(--line);padding:4px 0}
+  .score-list li.me{color:var(--phos)}
+  .score-list .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .unit-card .info-btn{position:absolute;top:4px;right:5px;width:auto;margin:0;border:1px solid var(--line);color:var(--ink-dim);font-size:11px;padding:1px 6px;line-height:1.4;background:transparent;font-family:var(--mono)}
   @media (hover:hover){ .unit-card .info-btn:hover{border-color:var(--phos-dim);color:var(--phos);background:transparent} }
 
@@ -322,6 +332,12 @@
     <h2>PRÁCTICA VS BOT</h2>
     <p class="hint">Jugá solo contra un bot que sigue las mismas reglas (desbloqueos, vida de base). Sirve para aprender y probar estrategias.</p>
     <button class="ghost" id="btnBot">JUGAR VS BOT</button>
+  </div>
+  <div class="card" id="cardScore" style="margin-top:18px">
+    <h2>RANKING LOCAL</h2>
+    <p class="hint" id="scoreMine"></p>
+    <ol class="score-list" id="scoreList"></ol>
+    <p class="mini">3 pts por victoria, 1 por empate. Se guarda en este navegador, por nombre de comandante (las partidas vs bot no suman).</p>
   </div>
   <div class="section-title" id="friendsLbl">JUGAR CON UN AMIGO · 1v1 PRIVADO</div>
   <p class="section-hint" id="friendsHint">Creá una sala y pasale el enlace o el código a tu amigo; quien reciba el enlace solo toca UNIRSE.</p>
@@ -519,7 +535,7 @@ const G = {
   round:1, gold:0, income:INCOME_START,
   winsMe:0, winsFoe:0,    // rounds won (statistics / replays)
   unlocked:new Set(STARTERS), foeUnlocked:new Set(STARTERS), offer:[], unlockPicked:null,   // unit unlocks (me / rival) and this round's offer
-  baseMe:BASE_HP, baseFoe:BASE_HP, matchEnded:false, bot:null,   // bot: practice opponent (null in online matches)   // base HP: the match ends when one reaches 0
+  baseMe:BASE_HP, baseFoe:BASE_HP, matchEnded:false, scored:false, bot:null,   // bot: practice opponent (null in online matches)   // base HP: the match ends when one reaches 0
   myDeploy:[],          // units I field: {id,x,y,lvl}
   myPending:[],         // actions this round (for undo): {kind,...}
   myTech:{},            // {unitId:true} techs I've researched
@@ -728,7 +744,7 @@ function giveUpReconnect(){
   $('btnLobby').style.display='';
 }
 function leaveToLobby(){
-  mmStop(); G.bot=null;
+  mmStop(); G.bot=null; clearTimeout(G._endT); closeModal();
   stopHeartbeat(); stopPlayback(); keepAwake(false); endReconnect(); stopPlanTimer();
   const c=G.conn, pr=G.peer;
   G.conn=null; G.peer=null;                       // detach first so close events are ignored
@@ -741,7 +757,7 @@ function leaveToLobby(){
   $('log').innerHTML='';
   hideSummary();
   $('createBox').style.display='none';
-  $('btnCreate').disabled=false; $('btnJoin').disabled=false; $('replayCard').classList.remove('hide'); $('cardSearch').classList.remove('hide'); $('cardBot').classList.remove('hide'); replayListRender();
+  $('btnCreate').disabled=false; $('btnJoin').disabled=false; $('replayCard').classList.remove('hide'); $('cardSearch').classList.remove('hide'); $('cardBot').classList.remove('hide'); replayListRender(); scoreRender();
   $('joinStatus').textContent='';
   $('btnLobby').style.display='none';
   setChip(false,'OFFLINE');
@@ -836,7 +852,7 @@ function mmTimer(fn,ms){ const id=setTimeout(fn,ms); MM.t.push(id); return id; }
 function mmClearTimers(){ MM.t.forEach(clearTimeout); MM.t=[]; }
 function mmKill(pr){ try{ if(pr) pr.destroy(); }catch(_){} }
 function mmUI(on){
-  for(const id of ['cardCreate','cardJoin','replayCard','friendsLbl','friendsHint','cardBot']){ const e=$(id); if(e) e.classList.toggle('hide',on); }
+  for(const id of ['cardCreate','cardJoin','replayCard','friendsLbl','friendsHint','cardBot','cardScore']){ const e=$(id); if(e) e.classList.toggle('hide',on); }
   $('btnSearch').hidden=on; $('mmBox').hidden=!on;
 }
 function mmSay(t){ $('mmStatus').textContent=t; }
@@ -1085,7 +1101,7 @@ function startMatch(){
   G.seed = combineSeed(G.isHost?G.mySeedPart:G.foeSeedPart, G.isHost?G.foeSeedPart:G.mySeedPart);
   G.unlocked=new Set(STARTERS); G.foeUnlocked=new Set(STARTERS); G.offer=[]; G.unlockPicked=null;
   if(G.bot) G.bot=botNew();                       // fresh bot for a (re)started practice match
-  G.round=1; G.income=INCOME_START; G.gold=G.income; G.winsMe=0; G.winsFoe=0; G.baseMe=BASE_HP; G.baseFoe=BASE_HP; G.matchEnded=false;
+  G.round=1; G.income=INCOME_START; G.gold=G.income; G.winsMe=0; G.winsFoe=0; G.baseMe=BASE_HP; G.baseFoe=BASE_HP; G.matchEnded=false; G.scored=false; clearTimeout(G._endT); closeModal();
   G.myDeploy=[]; G.myPending=[]; G.myTech={}; G.foeTech={}; G.pendingReady=null; G.sentReady=null; G.foeAway=false; endReconnect();
   recStart();
   G.foeLastDeploy=null; G.foeLastTech={}; G.rematchMe=false; G.foeRematch=false; G.mode='place';   // a fresh match must not inherit intel/rematch state
@@ -1101,6 +1117,85 @@ function startMatch(){
   buildShop();
   newRound(true);
   logLine(`Conexión establecida. <b class="p1">${esc(G.name)}</b> vs <b class="p2">${esc(G.foeName)}</b>. ¡Que empiece el asedio!`,'win');
+}
+
+/* ---------- Score by name (local) ---------- */
+// No server, so the table lives in this browser, keyed by commander name (case-insensitive). Not for practice matches.
+const el=(tag,cls,txt)=>{ const e=document.createElement(tag); if(cls) e.className=cls; if(txt!=null) e.textContent=txt; return e; };
+const SCORE_KEY='ironsiege.scores', SCORE_MAX=60, PTS_WIN=3, PTS_DRAW=1;
+function scoreKey(n){ return String(n||'').trim().toLowerCase().slice(0,14); }
+function scorePts(r){ return r.w*PTS_WIN + r.d*PTS_DRAW; }
+function scoreLoad(){
+  let raw=null; try{ raw=JSON.parse(localStorage.getItem(SCORE_KEY)); }catch(_){}
+  const t=Object.create(null);                      // keys are typed by players: never a plain object ('__proto__')
+  const num=v=>Math.min(1e6,Math.max(0,Math.floor(+v||0)));
+  if(raw && typeof raw==='object') for(const k of Object.keys(raw).slice(0,SCORE_MAX)){
+    const r=raw[k]; if(!k||!r||typeof r!=='object') continue;
+    t[k]={name:cleanName(r.name,k),w:num(r.w),l:num(r.l),d:num(r.d),bw:num(r.bw),bl:num(r.bl)};
+  }
+  return t;
+}
+function scoreRows(t){
+  return Object.keys(t).map(k=>Object.assign({k,pts:scorePts(t[k])},t[k]))
+    .sort((a,b)=>b.pts-a.pts||b.w-a.w||(a.k<b.k?-1:a.k>b.k?1:0));
+}
+// res: 'win'|'loss'|'draw' for the local player; once per match
+function scoreMatch(res){
+  const k=scoreKey(G.name);
+  if(G.scored||!k) return null;
+  G.scored=true;
+  const t=scoreLoad();
+  const r=t[k]||(t[k]={name:cleanName(G.name,k),w:0,l:0,d:0,bw:0,bl:0});
+  r.name=cleanName(G.name,k);
+  if(G.bot){ if(res==='win') r.bw++; else if(res==='loss') r.bl++; }
+  else if(res==='win') r.w++; else if(res==='loss') r.l++; else r.d++;
+  const keys=Object.keys(t);
+  if(keys.length>SCORE_MAX) keys.filter(x=>x!==k).sort((a,b)=>scorePts(t[a])-scorePts(t[b])).slice(0,keys.length-SCORE_MAX).forEach(x=>delete t[x]);
+  try{ localStorage.setItem(SCORE_KEY,JSON.stringify(t)); }catch(_){}
+  scoreRender();
+  return {rec:r,pts:scorePts(r),rank:scoreRows(t).findIndex(x=>x.k===k)+1,total:Object.keys(t).length};
+}
+function scoreLine(r){ return `${r.w}V · ${r.l}D · ${r.d}E — ${scorePts(r)} pts`; }
+function scoreRender(){
+  const list=$('scoreList'), mine=$('scoreMine'); if(!list||!mine) return;
+  const t=scoreLoad(), me=scoreKey($('playerName').value), rows=scoreRows(t);
+  mine.textContent = !me ? 'Poné tu nombre para ver tu récord.' : t[me] ? `Tu récord (${t[me].name}): ${scoreLine(t[me])}` : 'Todavía no jugaste partidas con este nombre.';
+  list.textContent='';
+  rows.slice(0,5).forEach((r,i)=>{
+    const li=el('li',r.k===me?'me':'');
+    li.appendChild(el('span','nm',`${i+1}. ${r.name}`)); li.appendChild(el('span','',`${r.pts} pts · ${r.w}V ${r.l}D`));
+    list.appendChild(li);
+  });
+  if(!rows.length) list.appendChild(el('li','','Sin partidas todavía.'));
+}
+// leaving an online match that is still going counts as a loss (otherwise quitting would dodge defeats)
+function abandonMatch(){
+  if(G.matchEnded||G.scored||!(G.phase==='plan'||G.phase==='battle'||G.phase==='between')) return;
+  if(typeof confirm==='function' && !G.bot && !confirm('Si salís ahora, la partida cuenta como derrota. ¿Salir?')) return false;
+  scoreMatch('loss');
+}
+
+/* ---------- End of match screen ---------- */
+function showEndScreen(out,sc){
+  const win=out==='me', draw=out==='draw';
+  const cls=win?'':draw?'draw':'lose';
+  const title=win?'VICTORIA':draw?'EMPATE':'DERROTA';
+  const line=draw?`Las dos bases quedaron en ${G.baseMe}.`:win?`Destruiste la base de ${esc(G.foeName)}.`:`${esc(G.foeName)} destruyó tu base.`;
+  const sc2=sc?(G.bot?`<div class="end-score">Práctica vs bot: no suma puntos.<br>${esc(sc.rec.name)}: ${sc.rec.bw} victorias · ${sc.rec.bl} derrotas contra el bot</div>`
+    :`<div class="end-score"><b>${esc(sc.rec.name)}</b><br>${scoreLine(sc.rec)}<br>Puesto ${sc.rank} de ${sc.total} en el ranking local</div>`):'';
+  $('modalContent').innerHTML=`<div class="endscreen ${cls}">
+    <div class="end-title">${title}</div>
+    <div class="end-line">${line}</div>
+    <div class="end-line">Bases: ${esc(G.name)} ${G.baseMe} · ${esc(G.foeName)} ${G.baseFoe} · ${G.round} rondas</div>
+    ${sc2}
+    <button id="endAgain">BUSCAR OTRA PARTIDA</button>
+    <button class="ghost" id="endRematch"${canRematch()?'':' hidden'}>REVANCHA</button>
+    <button class="ghost" id="endMenu">VOLVER AL MENÚ</button>
+  </div>`;
+  $('endAgain').onclick=()=>{ closeModal(); leaveToLobby(); mmStart(); };
+  $('endRematch').onclick=()=>{ closeModal(); requestRematch(); };
+  $('endMenu').onclick=()=>{ closeModal(); leaveToLobby(); };
+  $('modalBg').classList.add('show');
 }
 
 /* ---------- Rematch ---------- */
@@ -2141,6 +2236,9 @@ function finishRound(result, myColorSide){
     updateRematchBtn(); $('btnShareReplay').hidden=!(Rec.cur&&Rec.cur.rounds.length);
     $('btnLobby').style.display='';   // heartbeat keeps running: a slow-playback rival must not look dead
     toast(out==='me'?'¡GANASTE EL ASEDIO!':out==='foe'?'Perdiste el asedio':'Empate');
+    const sc=scoreMatch(out==='me'?'win':out==='foe'?'loss':'draw');
+    clearTimeout(G._endT);
+    G._endT=setTimeout(()=>{ if(G.phase==='over'&&G.matchEnded) showEndScreen(out,sc); },1600);   // after the round banner
     return;
   }
 
@@ -2500,12 +2598,13 @@ function esc(s){ return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;',
 /* ---------- wire lobby ---------- */
 $('btnCreate').onclick=hostCreate;
 $('btnJoin').onclick=joinRoom;
-$('btnLobby').onclick=leaveToLobby;
+$('btnLobby').onclick=()=>{ if(abandonMatch()===false) return; leaveToLobby(); };
 $('btnHelp').onclick=openHelp;
 // first visit: show the rules once (it is a game with a lot of new mechanics)
 try{ if(!localStorage.getItem('ironsiege.helpSeen') && !/^#replay=/.test(location.hash) && !navigator.webdriver) setTimeout(openHelp,600); }catch(_){}   // (not under automation: it would cover the page)
 try{ const n=localStorage.getItem('ironsiege.name'); if(n&&!$('playerName').value) $('playerName').value=cleanName(n,''); }catch(_){}
-$('playerName').addEventListener('input',e=>{ try{ localStorage.setItem('ironsiege.name',e.target.value.trim().slice(0,14)); }catch(_){} });
+$('playerName').addEventListener('input',e=>{ try{ localStorage.setItem('ironsiege.name',e.target.value.trim().slice(0,14)); }catch(_){} scoreRender(); });
+scoreRender();
 $('btnSearch').onclick=mmStart;
 $('btnBot').onclick=startBotMatch;
 $('btnSearchCancel').onclick=mmCancel;

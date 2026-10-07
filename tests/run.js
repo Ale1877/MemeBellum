@@ -983,6 +983,52 @@ pending.push((async () => {
   check('bot: legal, determinista, partidas completas bot-vs-bot y flujo real (revancha, sin falsas desconexiones)', fail.length === 0, fail.slice(0, 4).join('; '));
 }
 
+// Fin de partida y ranking por nombre: se registra una vez, por nombre, sin contaminar objetos y con abandono = derrota
+{
+  const fail = [];
+  const { makeCrowd } = require('./net');
+  const c = makeCrowd(1); const M = c.ms[0]; const G = M.G; const A = M.api; const el = (id) => M.ctx.document.getElementById(id);
+  const store = {}; M.ctx.localStorage = { getItem: (k) => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = String(v); } };
+  G.name = 'Ale'; G.bot = null; G.scored = false;
+  const r1 = A.scoreMatch('win'); const r1b = A.scoreMatch('win');
+  if (!r1 || r1.rec.w !== 1 || r1.pts !== 3 || r1b !== null) fail.push('victoria no registrada una sola vez');
+  G.name = 'ALE'; G.scored = false; A.scoreMatch('draw'); G.scored = false; G.name = 'ale'; A.scoreMatch('loss');
+  const t = A.scoreLoad(); const rec = t['ale'];
+  if (!rec || rec.w !== 1 || rec.d !== 1 || rec.l !== 1 || Object.keys(t).length !== 1) fail.push('el nombre no es insensible a mayúsculas: ' + JSON.stringify(t));
+  if (A.scorePts(rec) !== 4) fail.push('puntos mal: ' + A.scorePts(rec));
+  G.name = 'Ale'; G.scored = false; G.bot = {}; A.scoreMatch('win');
+  const t2 = A.scoreLoad(); if (t2['ale'].w !== 1 || t2['ale'].bw !== 1) fail.push('vs bot no debe sumar puntos pero sí contarse aparte');
+  G.bot = null;
+  // nombres hostiles y almacenamiento corrupto
+  G.name = '__proto__'; G.scored = false; A.scoreMatch('win'); G.name = '<img onerror=x>'; G.scored = false; A.scoreMatch('win');
+  if (({}).w !== undefined || Object.prototype.w !== undefined) fail.push('contaminó Object.prototype');
+  store[A.SCORE_KEY] = '{"x":{"w":"9e99","l":-5,"d":"a","name":42},"__proto__":{"w":1},"y":null}';
+  const t3 = A.scoreLoad(); if (t3['x'] && (t3['x'].w > 1e6 || t3['x'].l !== 0 || t3['x'].d !== 0)) fail.push('almacenamiento corrupto no saneado');
+  store[A.SCORE_KEY] = 'no json'; if (Object.keys(A.scoreLoad()).length !== 0) fail.push('JSON roto debía dar tabla vacía');
+  // tope de entradas
+  store[A.SCORE_KEY] = '{}'; for (let i = 0; i < 80; i++) { G.name = 'jug' + i; G.scored = false; A.scoreMatch(i % 2 ? 'win' : 'loss'); }
+  if (Object.keys(A.scoreLoad()).length > 60) fail.push('la tabla no tiene tope');
+  // partida vs bot hasta el final: registra, y la pantalla final aparece con las opciones
+  store[A.SCORE_KEY] = '{}';
+  el('playerName').value = 'Ale'; A.startBotMatch(); c.run(200); G.battleSpeed = 4;
+  let g = 0; while (G.phase !== 'over' && g++ < 400) { if (G.phase === 'plan' && !G.myReady) { if (G.myDeploy.length < 3) G.myDeploy.push({ id: 'warden', lvl: 1, x: 300, y: 400 }, { id: 'crawler', lvl: 1, x: 600, y: 410 }); A.confirmReady(true); } c.run(500); }
+  c.run(2000);
+  if (G.phase !== 'over' || !G.scored) fail.push('el fin de la partida no se registró');
+  const html = el('modalContent').innerHTML;
+  if (!/VICTORIA|DERROTA|EMPATE/.test(html) || !/endAgain/.test(html) || !/BUSCAR OTRA PARTIDA/.test(html)) fail.push('falta la pantalla de fin de partida');
+  const rb = A.scoreLoad()['ale']; if (!rb || rb.w || rb.l || rb.d || rb.bw + rb.bl !== 1) fail.push('registro vs bot incorrecto: ' + JSON.stringify(rb));
+  // "BUSCAR OTRA PARTIDA" saca al jugador del resultado y lo deja en la cola
+  el('endAgain').onclick(); c.run(50);
+  if (G.phase !== 'lobby' || G.bot || !A.MM.on) fail.push(`BUSCAR OTRA PARTIDA no vuelve a la cola (${G.phase}, mm=${A.MM.on})`);
+  A.mmCancel();
+  // abandonar una partida online en curso = derrota (una sola vez)
+  const P = makeCrowd(2); const [X, Y] = P.ms; const sx = {}; X.ctx.localStorage = { getItem: (k) => (k in sx ? sx[k] : null), setItem: (k, v) => { sx[k] = String(v); } };
+  P.ms.forEach(m => m.ctx.document.getElementById('playerName').value = m.name); X.api.mmStart(); P.run(500); Y.api.mmStart(); P.run(20000);
+  if (X.G.phase !== 'plan') fail.push('abandono: la partida online no empezó (' + X.G.phase + ')');
+  else { X.api.abandonMatch(); X.api.leaveToLobby(); const q = X.api.scoreLoad()[X.api.scoreKey(X.name)]; if (!q || q.l !== 1) fail.push('abandonar no contó derrota: ' + JSON.stringify(q)); X.api.abandonMatch(); }
+  check('fin de partida y ranking por nombre (una vez por partida, saneado, abandono = derrota, otra partida desde el resultado)', fail.length === 0, fail.slice(0, 4).join('; '));
+}
+
 // --report: tabla de winrates entre todos los tipos y unidades
 if (process.argv.includes('--report')) {
   console.log('\nTriángulo por presupuesto (% victorias del que debería ganar):');
