@@ -49,13 +49,28 @@ function duelWinrate(typeA, typeB, n = 40, budget = 800) {
 }
 
 // (b) triángulo de contras: el que "gana" debe ganar claramente a costo igual.
-// Se mide en presupuestos de partida media/tardía (ver --report para barrido completo:
-// a presupuestos <=800 el enjambre todavía le gana al rango; es un hallazgo de balance conocido).
+// A 300◈ todavía es una sola unidad contra un enjambre (no hay masa crítica), por eso se exige desde 500◈.
 const TRI = [['swarm', 'heavy'], ['heavy', 'ranged'], ['ranged', 'swarm']];
-const TRI_BUDGETS = [1200, 2000];
+const TRI_BUDGETS = [500, 1200, 2500];
 for (const budget of TRI_BUDGETS) for (const [a, b] of TRI) {
   const r = duelWinrate(a, b, 40, budget);
-  check(`triángulo @${budget}◈: ${a} > ${b}`, r.rate >= 0.55, `${(r.rate * 100).toFixed(0)}% (${r.wins}/${r.n}, empates ${r.draws})`);
+  check(`triángulo @${budget}◈: ${a} > ${b}`, r.rate >= 0.6, `${(r.rate * 100).toFixed(0)}% (${r.wins}/${r.n}, empates ${r.draws})`);
+}
+
+// (b2) ninguna unidad es inútil ni dominante: winrate promedio contra las demás (ejércitos puros, 1000◈)
+{
+  const { createBench } = require('./balance');
+  const B = createBench(); const ids = B.ids(); const bad = [], info = [];
+  for (const a of ids) {
+    const v = ids.filter(c => c !== a).map(c => B.unitDuel(a, c, 1000, 30, 321));
+    const avg = v.reduce((s, x) => s + x, 0) / v.length;
+    info.push(`${a} ${(avg * 100).toFixed(0)}%`);
+    if (avg < 0.25 || avg > 0.75) bad.push(`${a} ${(avg * 100).toFixed(0)}%`);
+  }
+  check('balance: ninguna unidad fuera de 25–75% de winrate promedio', bad.length === 0, bad.length ? 'fuera de rango: ' + bad.join(', ') : info.join(', '));
+  // (b3) fusión: una unidad nivel 2 no debe aplastar a dos de nivel 1 (mismo costo)
+  const worst = ids.map(id => [id, B.fusionDuel(id, 30, 321).L2]).sort((x, y) => y[1] - x[1])[0];
+  check('balance: fusión L2 vs 2×L1 no domina (≤ 92%)', worst[1] <= 0.92, `peor caso ${worst[0]} ${(worst[1] * 100).toFixed(0)}%`);
 }
 
 // (c) determinismo: misma entrada -> mismo resultado exacto
