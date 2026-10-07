@@ -197,7 +197,7 @@
     .modebar{display:grid;grid-template-columns:1fr 1fr}
     .bar{display:grid;grid-template-columns:1fr 1fr}
     .bar button{min-width:0;letter-spacing:1px;font-size:12px}
-    .bar #btnUndo,.bar #btnLobby{grid-column:1/-1}
+    .bar #btnUndo,.bar #btnLobby,.bar #btnRematch{grid-column:1/-1}
     .code-big{font-size:26px;letter-spacing:6px}
   }
 
@@ -336,6 +336,7 @@
     <button class="ghost" id="btnUndo">DESHACER ÚLTIMA</button>
     <button class="ghost" id="btnFx">EFECTOS: ALTO</button>
     <button class="ghost" id="btnSnd">SONIDO: ON</button>
+    <button id="btnRematch" hidden>REVANCHA</button>
     <button class="danger" id="btnLobby" style="display:none">VOLVER AL LOBBY</button>
   </div>
   <div class="card summary" id="summary" hidden></div>
@@ -402,10 +403,11 @@ const TYPE_ADV = { // attacker type -> {defender type: multiplier}
 };
 
 /* ---------- Game state ---------- */
+const INCOME_START=200;
 const G = {
   name:'', foeName:'RIVAL',
   isHost:false, conn:null, peer:null,
-  round:1, gold:0, income:200,
+  round:1, gold:0, income:INCOME_START,
   winsMe:0, winsFoe:0,
   myDeploy:[],          // units I field: {id,x,y,lvl}
   myPending:[],         // actions this round (for undo): {kind,...}
@@ -545,7 +547,7 @@ function connectionLost(msg){
   if(G.phase==='lobby'){ toast(msg); return; }
   const old=G.conn; G.conn=null;                  // detach first so its close event is ignored
   try{ if(old) old.close(); }catch(_){}
-  if(G.phase==='over'){ $('btnLobby').style.display=''; return; }   // match already decided: nothing to resume
+  if(G.phase==='over'){ $('btnLobby').style.display=''; updateRematchBtn(); return; }   // match already decided: nothing to resume
   beginReconnect(msg);
 }
 
@@ -611,7 +613,8 @@ function leaveToLobby(){
   try{ if(pr) pr.destroy(); }catch(_){}
   Object.assign(G,{ phase:'lobby', isHost:false, foeName:'RIVAL', myReady:false, foeReady:false, foeDeploy:null,
     foeTech:{}, foeLastDeploy:null, foeLastTech:{}, pendingReady:null, myDeploy:[], myPending:[], myTech:{},
-    code:'', token:'', sentReady:null, foeAway:false });
+    code:'', token:'', sentReady:null, foeAway:false, rematchMe:false, foeRematch:false });
+  $('btnRematch').hidden=true;
   $('log').innerHTML='';
   hideSummary();
   $('createBox').style.display='none';
@@ -661,8 +664,16 @@ function onData(m){
     case 'ready':
       onFoeReady(m);
       break;
-    case 'rematch':
-      toast('Rival quiere seguir'); break;
+    case 'rseed':                                  // rematch, step 2 (host -> guest): only valid if both of us asked
+      if(G.phase!=='over'||G.isHost||!G.rematchMe||!G.foeRematch) break;
+      G.foeSeedPart=m.seed>>>0; G.mySeedPart=(Math.random()*1e9)|0;
+      send({t:'rseed2',seed:G.mySeedPart}); startMatch(); break;
+    case 'rseed2':                                 // rematch, step 3 (guest -> host)
+      if(G.phase!=='over'||!G.isHost||!G.rematchMe||!G.foeRematch) break;
+      G.foeSeedPart=m.seed>>>0; startMatch(); break;
+    case 'rematch':                                // may arrive while we still watch the last battle: just remember it
+      if(G.phase==='lobby') break;
+      G.foeRematch=true; toast('Tu rival quiere la revancha'); updateRematchBtn(); maybeStartRematch(); break;
   }
 }
 
@@ -714,8 +725,10 @@ function startMatch(){
   // combined deterministic seed, identical on both machines: the parts MUST be
   // combined in canonical (host, guest) order, never in (me, foe) order.
   G.seed = combineSeed(G.isHost?G.mySeedPart:G.foeSeedPart, G.isHost?G.foeSeedPart:G.mySeedPart);
-  G.round=1; G.gold=G.income; G.winsMe=0; G.winsFoe=0;
+  G.round=1; G.income=INCOME_START; G.gold=G.income; G.winsMe=0; G.winsFoe=0;
   G.myDeploy=[]; G.myPending=[]; G.myTech={}; G.foeTech={}; G.pendingReady=null; G.sentReady=null; G.foeAway=false; endReconnect();
+  G.foeLastDeploy=null; G.foeLastTech={}; G.rematchMe=false; G.foeRematch=false; G.mode='place';   // a fresh match must not inherit intel/rematch state
+  $('btnRematch').hidden=true;
   $('tagMe').textContent=G.name.toUpperCase();
   $('tagFoe').textContent=G.foeName.toUpperCase();
   show('scrGame');
@@ -727,6 +740,26 @@ function startMatch(){
   buildShop();
   newRound(true);
   logLine(`Conexión establecida. <b class="p1">${esc(G.name)}</b> vs <b class="p2">${esc(G.foeName)}</b>. ¡Que empiece el asedio!`,'win');
+}
+
+/* ---------- Rematch ---------- */
+// Both players must ask; then the host sends fresh seed material and both machines restart the match
+// over the same connection (no lobby, no new room code).
+function canRematch(){ return G.phase==='over' && !G.reconnecting && G.conn && G.conn.open && (G.winsMe>=3||G.winsFoe>=3); }
+function updateRematchBtn(){
+  const b=$('btnRematch'); if(!b) return;
+  b.hidden=!canRematch();
+  b.disabled=!!G.rematchMe;
+  b.textContent = G.rematchMe ? 'ESPERANDO AL RIVAL…' : G.foeRematch ? 'REVANCHA · EL RIVAL ESTÁ LISTO' : 'REVANCHA';
+}
+function requestRematch(){
+  if(!canRematch()||G.rematchMe) return;
+  G.rematchMe=true; send({t:'rematch'}); updateRematchBtn(); maybeStartRematch();
+}
+function maybeStartRematch(){
+  if(!(G.isHost && G.rematchMe && G.foeRematch && G.phase==='over')) return;
+  G.mySeedPart=(Math.random()*1e9)|0;
+  send({t:'rseed',seed:G.mySeedPart});
 }
 
 function newRound(first){
@@ -1649,6 +1682,7 @@ function finishRound(result, myColorSide){
     $('phaseNote').textContent='Partida terminada. Volvé al lobby para jugar otra.';
     $('btnReady').disabled=true; $('btnUndo').disabled=true;
     endReconnect();
+    updateRematchBtn();
     $('btnLobby').style.display='';   // heartbeat keeps running: a slow-playback rival must not look dead
     toast(G.winsMe>=3?'¡GANASTE EL ASEDIO!':'Perdiste el asedio');
     return;
@@ -1792,6 +1826,7 @@ function esc(s){ return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;',
 $('btnCreate').onclick=hostCreate;
 $('btnJoin').onclick=joinRoom;
 $('btnLobby').onclick=leaveToLobby;
+$('btnRematch').onclick=requestRematch;
 $('btnSnd').onclick=()=>{ audioInit(); setSnd(!AUD.on,true); toast('Sonido: '+(AUD.on?'ON':'OFF')); sfx('click'); };
 setSnd(AUD.on,false);
 // first touch/click unlocks audio (autoplay policy); every button gets a click blip

@@ -465,6 +465,41 @@ for (const budget of TRI_BUDGETS) for (const [a, b] of TRI) {
   check('temporizador: auto-confirma al vencer, acepta ejército vacío y mantiene la simulación idéntica', fail.length === 0, fail.join('; '));
 }
 
+// (o) revancha directa: ambos deben pedirla, semillas nuevas idénticas, estado limpio y partida jugable
+{
+  const { makePair, handshake } = require('./net');
+  const p = makePair({ raf: true }); handshake(p);
+  const H = p.host, Gu = p.guest, fail = [];
+  const run = (ms) => { for (let t = 0; t < ms; t += 250) { p.clock.advance(250); p.pump(); } };
+  const seed0 = H.G.seed;
+  // estado "partida terminada" con restos de la anterior que NO deben heredarse
+  for (const m of [H, Gu]) { m.G.phase = 'over'; m.G.income = 520; m.G.round = 6; m.G.foeLastDeploy = [{ id: 'titan', lvl: 2, x: 1, y: 300 }]; m.G.foeLastTech = { titan: true }; }
+  H.G.winsMe = 3; H.G.winsFoe = 1; Gu.G.winsMe = 1; Gu.G.winsFoe = 3;
+  H.requestRematch(); p.pump(); run(500);
+  if (H.G.phase !== 'over' || Gu.G.phase !== 'over') fail.push('arrancó con un solo jugador pidiendo la revancha');
+  Gu.requestRematch(); p.pump(); run(1000);
+  for (const [n, m] of [['host', H], ['guest', Gu]]) {
+    const G = m.G;
+    if (G.phase !== 'plan' || G.round !== 1 || G.winsMe !== 0 || G.winsFoe !== 0) fail.push(`${n}: no reinició (fase ${G.phase}, ronda ${G.round}, ${G.winsMe}-${G.winsFoe})`);
+    if (G.income !== 200 || G.gold !== 200) fail.push(`${n}: economía heredada (ingreso ${G.income}, oro ${G.gold})`);
+    if (G.foeLastDeploy !== null || Object.keys(G.foeLastTech).length) fail.push(`${n}: heredó el intel de la partida anterior`);
+    if (G.rematchMe || G.foeRematch) fail.push(`${n}: banderas de revancha sin limpiar`);
+  }
+  if (H.G.seed !== Gu.G.seed) fail.push('semillas distintas tras la revancha');
+  if (H.G.seed === seed0) fail.push('la revancha reutilizó la semilla anterior');
+  // la nueva partida es jugable y las simulaciones coinciden
+  for (const m of [H, Gu]) { m.G.battleSpeed = 4; m.G.myDeploy.push({ id: 'warden', lvl: 1, x: 300, y: 400 }); m.confirmReady(); }
+  p.pump(); run(25000);
+  if (p.log.host.length !== 1 || JSON.stringify(p.log.host) !== JSON.stringify(p.log.guest)) fail.push('la partida nueva no simuló igual en ambos lados');
+  // mensajes fuera de lugar se ignoran: rseed sin que ambos pidan revancha; revancha en el lobby
+  const q = makePair({ raf: true }); handshake(q);
+  q.guest.G.phase = 'over'; q.guest.onData({ t: 'rseed', seed: 123 });
+  if (q.guest.G.phase !== 'over') fail.push('un rseed sin revancha mutua reinició la partida');
+  const r = makePair({ raf: true }); handshake(r); r.host.G.phase = 'lobby'; r.host.onData({ t: 'rematch' });
+  if (r.host.G.foeRematch) fail.push('aceptó revancha estando en el lobby');
+  check('revancha: pedido mutuo, semillas nuevas idénticas, estado limpio y juego normal', fail.length === 0, fail.join('; '));
+}
+
 // --report: tabla de winrates entre todos los tipos y unidades
 if (process.argv.includes('--report')) {
   console.log('\nTriángulo por presupuesto (% victorias del que debería ganar):');

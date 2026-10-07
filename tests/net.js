@@ -2,7 +2,7 @@
 // conectadas por una cola de mensajes en memoria (JSON, como WebRTC) y un reloj falso compartido.
 const { loadGame } = require('./load');
 
-const NAMES = ['simulate','UNITS','G','makeRNG','onData','send','startMatch','tryResolve','newRound','finishRound','playback','confirmReady','sanitizeDeploy','sanitizeTech','onFoeReady','connectionLost','leaveToLobby','onIncoming','onFieldTap','undoLast','P','FXQ','setFx','drawBattle','HAS_RAF','spriteFor','spriteDir','AUD','sfx','audioInit','setSnd','buildSummary','renderSummary','expand','startPlanTimer','tickPlanTimer'];
+const NAMES = ['simulate','UNITS','G','makeRNG','onData','send','startMatch','tryResolve','newRound','finishRound','playback','confirmReady','sanitizeDeploy','sanitizeTech','onFoeReady','connectionLost','leaveToLobby','onIncoming','onFieldTap','undoLast','P','FXQ','setFx','drawBattle','HAS_RAF','spriteFor','spriteDir','AUD','sfx','audioInit','setSnd','buildSummary','renderSummary','expand','startPlanTimer','tickPlanTimer','requestRematch'];
 
 function makeClock() {
   let now = 0, id = 1; const tm = new Map();
