@@ -344,6 +344,36 @@ for (const budget of TRI_BUDGETS) for (const [a, b] of TRI) {
   check('reconexión: corte con ready perdido, partida con cortes, intrusos, señalización, rival ausente', fail.length === 0, fail.join('; '));
 }
 
+// (k) renderizador con requestAnimationFrame: interpola sin romper, acota las partículas y limpia al terminar
+{
+  const { makePair, handshake } = require('./net');
+  const fail = [];
+  const addUnits = (m, y) => m.G.myDeploy.push({ id: 'crawler', lvl: 1, x: 300, y }, { id: 'longbow', lvl: 2, x: 500, y }, { id: 'vulcan', lvl: 1, x: 700, y }, { id: 'titan', lvl: 1, x: 400, y: y - 20 });
+  for (const level of ['high', 'low', 'off']) {
+    const p = makePair({ raf: true }); handshake(p);
+    if (!p.host.HAS_RAF) fail.push('el sandbox no activó rAF');
+    for (const m of [p.host, p.guest]) { m.setFx(level, false); m.G.battleSpeed = 2; }
+    addUnits(p.host, 400); addUnits(p.guest, 380);
+    p.host.confirmReady(); p.pump(); p.guest.confirmReady(); p.pump();
+    let maxLive = 0, g = 0;
+    while (p.host.G.phase !== 'plan' && p.host.G.phase !== 'over' && g++ < 20000) {
+      p.clock.advance(16); p.pump();
+      maxLive = Math.max(maxLive, p.host.P.live, p.guest.P.live);
+    }
+    const cap = p.host.FXQ[level].parts;
+    if (g >= 20000) fail.push(`${level}: el combate no terminó`);
+    if (maxLive > cap) fail.push(`${level}: partículas ${maxLive} > tope ${cap}`);
+    if (level === 'off' && maxLive !== 0) fail.push('con efectos OFF no deben crearse partículas');
+    if (level === 'high' && maxLive === 0) fail.push('con efectos ALTO nunca hubo partículas');
+    if (p.log.battleDraws.host < 20 || p.log.battleDraws.guest < 20) fail.push(`${level}: pocos frames dibujados (${p.log.battleDraws.host}/${p.log.battleDraws.guest})`);
+    if (JSON.stringify(p.log.host) !== JSON.stringify(p.log.guest)) fail.push(`${level}: los efectos alteraron la simulación`);
+    p.clock.advance(3000);                                      // el loop se detiene al apagarse los efectos
+    if (p.host.P.live !== 0) fail.push(`${level}: quedaron partículas vivas tras el combate`);
+    if (p.host.G._bt) fail.push(`${level}: _bt no se limpió al empezar la ronda siguiente`);
+  }
+  check('renderizador: rAF, tope de partículas por calidad, sin alterar la simulación, limpieza', fail.length === 0, fail.join('; '));
+}
+
 // --report: tabla de winrates entre todos los tipos y unidades
 if (process.argv.includes('--report')) {
   console.log('\nTriángulo por presupuesto (% victorias del que debería ganar):');

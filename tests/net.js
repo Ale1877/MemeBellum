@@ -2,7 +2,7 @@
 // conectadas por una cola de mensajes en memoria (JSON, como WebRTC) y un reloj falso compartido.
 const { loadGame } = require('./load');
 
-const NAMES = ['simulate','UNITS','G','makeRNG','onData','send','startMatch','tryResolve','newRound','finishRound','playback','confirmReady','sanitizeDeploy','sanitizeTech','onFoeReady','connectionLost','leaveToLobby','onIncoming','onFieldTap','undoLast'];
+const NAMES = ['simulate','UNITS','G','makeRNG','onData','send','startMatch','tryResolve','newRound','finishRound','playback','confirmReady','sanitizeDeploy','sanitizeTech','onFoeReady','connectionLost','leaveToLobby','onIncoming','onFieldTap','undoLast','P','FXQ','setFx','drawBattle','HAS_RAF','spriteFor','spriteDir'];
 
 function makeClock() {
   let now = 0, id = 1; const tm = new Map();
@@ -26,16 +26,21 @@ function makeClock() {
   };
 }
 
-function makePair() {
+function makePair(opts = {}) {
   const clock = makeClock();
   const sb = { setTimeout: clock.setTimeout, clearTimeout: clock.clearTimeout, setInterval: clock.setInterval, clearInterval: clock.clearInterval };
+  if (opts.raf) { sb.requestAnimationFrame = cb => clock.setTimeout(() => cb(clock.now), 16); sb.performance = { now: () => clock.now }; }   // ~60fps
   const hl = loadGame(NAMES, { ...sb }), gl = loadGame(NAMES, { ...sb });
   const host = hl.api, guest = gl.api;
   const queue = [];
-  const log = { host: [], guest: [], lost: { host: 0, guest: 0 } };                 // cada simulate() que corre cada máquina
+  const log = { host: [], guest: [], lost: { host: 0, guest: 0 }, battleDraws: { host: 0, guest: 0 } };                 // cada simulate() que corre cada máquina
   for (const [who, l] of [['host', hl], ['guest', gl]]) {
     const real = l.ctx.simulate;
     l.ctx.simulate = (...a) => { const r = real(...a); log[who].push({ winner: r.winner, hostHP: r.hostHP, guestHP: r.guestHP }); return r; };
+  }
+  for (const [who, l] of [['host', hl], ['guest', gl]]) {
+    const real = l.ctx.drawBattle;
+    if (real) l.ctx.drawBattle = (...a) => { log.battleDraws[who]++; return real(...a); };
   }
   log.views = { host: [], guest: [] };                  // cada frame dibujado en combate (simView)
   for (const [who, l] of [['host', hl], ['guest', gl]]) {

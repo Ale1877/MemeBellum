@@ -22,7 +22,7 @@ const check = (n, ok, d = '') => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${n}${d
     const small = await pg.evaluate(() => [...document.querySelectorAll('button, .unit-card')].filter(e => e.offsetParent).filter(e => { const r = e.getBoundingClientRect(); return r.height < 36 || r.width < 36; }).map(e => e.id || e.className));
     check(`${tag} objetivos táctiles >= 36px`, small.length === 0, small.join(','));
     const cv = await pg.evaluate(() => { const c = document.getElementById('field'), r = c.getBoundingClientRect(); return { cw: r.width, ch: r.height, bw: c.width, bh: c.height }; });
-    check(`${tag} canvas nítido (resolución ~DPR) y alto usable`, cv.bw >= cv.cw * 2.9 && cv.ch >= 150, `${Math.round(cv.cw)}x${Math.round(cv.ch)} css, ${cv.bw}x${cv.bh} px`);
+    check(`${tag} canvas nítido (2x, tope de DPR) y alto usable`, cv.bw >= cv.cw * 1.9 && cv.bw <= cv.cw * 2.1 && cv.ch >= 150, `${Math.round(cv.cw)}x${Math.round(cv.ch)} css, ${cv.bw}x${cv.bh} px`);
     // tocar para desplegar
     await pg.evaluate(() => clickShop('warden'));
     await pg.locator('#field').scrollIntoViewIfNeeded();
@@ -43,7 +43,7 @@ const check = (n, ok, d = '') => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${n}${d
     check(`${tag} MOVER con toques reposiciona la unidad`, after.n === 1 && Math.abs(after.x - 150) < 25 && after.y > 360, JSON.stringify({ before, after }));
     // rotar/redimensionar mantiene el canvas nítido y ajustado
     await pg.setViewportSize({ width: h, height: w }); await pg.waitForTimeout(150);
-    check(`${tag} al rotar el canvas se reajusta`, await pg.evaluate(() => { const c = document.getElementById('field'); return Math.abs(c.width / (devicePixelRatio) - c.getBoundingClientRect().width) < 2; }));
+    check(`${tag} al rotar el canvas se reajusta`, await pg.evaluate(() => { const c = document.getElementById('field'); return Math.abs(c.width / Math.min(devicePixelRatio, 2) - c.getBoundingClientRect().width) < 2; }));
     check(`${tag} sin errores de JS`, errs.length === 0, errs.join('|'));
     await ctx.close();
   }

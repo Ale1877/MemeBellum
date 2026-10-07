@@ -12,6 +12,11 @@ function extractScript(html) {
   return blocks[0];
 }
 
+// contexto 2D falso: cualquier método devuelve otro objeto encadenable (gradientes, etc.)
+function ctxStub() {
+  return new Proxy(function () {}, { get: (t, k) => (k === 'then' ? undefined : ctxStub()), set: () => true, apply: () => ctxStub() });
+}
+
 function stubEl() {
   const el = new Proxy(function () {}, {
     get(t, k) {
@@ -19,7 +24,7 @@ function stubEl() {
       if (k === 'classList') return { add() {}, remove() {}, toggle() {}, contains: () => false };
       if (k === 'style') return {};
       if (k === 'dataset') return {};
-      if (k === 'getContext') return () => new Proxy({}, { get: () => () => {} , set: () => true });
+      if (k === 'getContext') return () => ctxStub();
       if (k === 'querySelector') return () => stubEl();
       if (k === 'querySelectorAll') return () => [];
       if (k === 'getBoundingClientRect') return () => ({ left: 0, top: 0, width: 1000, height: 440 });
