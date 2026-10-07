@@ -22,7 +22,10 @@ Se publica como sitio estático (Cloudflare Pages). Ver `README.md` para la arqu
 - Mantener el proyecto como **un solo `index.html`** salvo acuerdo explícito.
 
 ## Flujo de trabajo
-- Una rama por mejora → cambio → `node tests/run.js` → commit con mensaje claro. **No pushear a `main` sin pedido explícito.**
+- Una rama por mejora → cambio → `node tests/run.js` → commit con mensaje claro.
+- **Instrucción permanente del dueño: toda mejora terminada y con los tests en verde se lleva a PRODUCCIÓN** (merge a `main` y push, sin pedir
+  confirmación). Antes de publicar: suite completa en un clon limpio (`git clone` + `node tests/run.js`). Después de publicar, avisar que
+  los jugadores deben recargar la página. Lo que NO esté probado o falle no se publica.
 - Antes de dar por buena una mejora visual, medir con `tests/perf.js` (Playwright) y revisar capturas en pantallas táctiles
   (`tests/mobile-smoke.js`). Presupuesto actual: ~2 ms/frame de dibujo con 72 unidades (raster por software).
 - Cambios de red: probar con `tests/net.js`/`fakepeer.js` (varias máquinas, cortes, intrusos). No asumir el comportamiento del
