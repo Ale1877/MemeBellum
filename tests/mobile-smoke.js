@@ -33,6 +33,14 @@ const check = (n, ok, d = '') => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${n}${d
     await pg.evaluate(({ x, y }) => { const f = document.getElementById('field'); const o = { pointerId: 7, bubbles: true, pointerType: 'touch' };
       f.dispatchEvent(new PointerEvent('pointerdown', { ...o, clientX: x, clientY: y })); f.dispatchEvent(new PointerEvent('pointerup', { ...o, clientX: x, clientY: y - 60 })); }, { x: box.x + box.width * 0.3, y: box.y + box.height * 0.8 });
     check(`${tag} arrastrar/scrollear sobre el campo no despliega`, await pg.evaluate(() => G.myDeploy.length) === 1);
+    // MOVER con toques: elegir la unidad y tocar otro lugar de mi mitad
+    await pg.evaluate(() => document.querySelector('[data-mode=move]').click());
+    const before = await pg.evaluate(() => ({ x: G.myDeploy[0].x, y: G.myDeploy[0].y }));
+    const px = box.x + before.x / 1000 * box.width, py = box.y + before.y / 440 * box.height;
+    await pg.touchscreen.tap(px, py);
+    await pg.touchscreen.tap(box.x + box.width * 0.15, box.y + box.height * 0.9);
+    const after = await pg.evaluate(() => ({ x: G.myDeploy[0].x, y: G.myDeploy[0].y, n: G.myDeploy.length }));
+    check(`${tag} MOVER con toques reposiciona la unidad`, after.n === 1 && Math.abs(after.x - 150) < 25 && after.y > 360, JSON.stringify({ before, after }));
     // rotar/redimensionar mantiene el canvas nítido y ajustado
     await pg.setViewportSize({ width: h, height: w }); await pg.waitForTimeout(150);
     check(`${tag} al rotar el canvas se reajusta`, await pg.evaluate(() => { const c = document.getElementById('field'); return Math.abs(c.width / (devicePixelRatio) - c.getBoundingClientRect().width) < 2; }));

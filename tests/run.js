@@ -246,6 +246,36 @@ for (const budget of TRI_BUDGETS) for (const [a, b] of TRI) {
   check('vista: cada jugador ve su ejército abajo en el combate', fail.length === 0, fail.join('; '));
 }
 
+// (i) modo MOVER: seleccionar, mover, deshacer, límites y bloqueo tras confirmar
+{
+  const { makePair, handshake } = require('./net');
+  const p = makePair(); handshake(p);
+  const m = p.host, G = m.G, fail = [];
+  G.myDeploy.push({ id: 'warden', lvl: 1, x: 300, y: 400 }, { id: 'marauder', lvl: 1, x: 700, y: 380 });
+  const gold0 = G.gold;
+  G.mode = 'move';
+  const u0 = G.myDeploy[0];
+  m.onFieldTap({ x: 302, y: 398 });                           // elige el warden
+  m.onFieldTap({ x: 500, y: 100 });                           // mitad enemiga: se rechaza
+  if (u0.x !== 300 || u0.y !== 400) fail.push('se movió a la mitad enemiga');
+  m.onFieldTap({ x: 520, y: 420 });                           // mitad propia: mueve
+  if (Math.abs(u0.x - 520) > 1 || Math.abs(u0.y - 420) > 1) fail.push(`no se movió (${u0.x},${u0.y})`);
+  if (G.gold !== gold0) fail.push('mover cobró créditos');
+  m.onFieldTap({ x: 520, y: 420 }); m.onFieldTap({ x: 700, y: 382 });   // elegir A y tocar cerca de B: cambia la selección, no mueve
+  if (u0.x !== 520 || G.myDeploy[1].x !== 700) fail.push('tocar cerca de otra unidad la movió');
+  m.onFieldTap({ x: 5000, y: 5000 });                         // fuera de rango: se acota al campo
+  if (!(G.myDeploy[1].x <= 1000 && G.myDeploy[1].y <= 440)) fail.push('no acotó al campo');
+  const nPend = G.myPending.length;
+  if (nPend < 2) fail.push('los movimientos no quedaron en la pila de deshacer: ' + nPend);
+  for (let i = 0; i < nPend; i++) m.undoLast();
+  if (u0.x !== 300 || u0.y !== 400 || G.myDeploy[1].x !== 700 || G.myDeploy[1].y !== 380) fail.push('deshacer no restauró posiciones');
+  // tras confirmar el despliegue ya no se puede mover
+  m.onFieldTap({ x: 300, y: 400 }); m.confirmReady();
+  m.onFieldTap({ x: 600, y: 420 });
+  if (u0.x !== 300) fail.push('se movió después de confirmar');
+  check('mover: selecciona, mueve gratis, acota, deshace y se bloquea al confirmar', fail.length === 0, fail.join('; '));
+}
+
 // --report: tabla de winrates entre todos los tipos y unidades
 if (process.argv.includes('--report')) {
   console.log('\nTriángulo por presupuesto (% victorias del que debería ganar):');

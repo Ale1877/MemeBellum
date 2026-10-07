@@ -2,7 +2,7 @@
 // conectadas por una cola de mensajes en memoria (JSON, como WebRTC) y un reloj falso compartido.
 const { loadGame } = require('./load');
 
-const NAMES = ['simulate','UNITS','G','makeRNG','onData','send','startMatch','tryResolve','newRound','finishRound','playback','confirmReady','sanitizeDeploy','sanitizeTech','onFoeReady','connectionLost','leaveToLobby','onIncoming'];
+const NAMES = ['simulate','UNITS','G','makeRNG','onData','send','startMatch','tryResolve','newRound','finishRound','playback','confirmReady','sanitizeDeploy','sanitizeTech','onFoeReady','connectionLost','leaveToLobby','onIncoming','onFieldTap','undoLast'];
 
 function makeClock() {
   let now = 0, id = 1; const tm = new Map();

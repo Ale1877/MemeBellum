@@ -194,6 +194,7 @@
     .unit-card .tech-tag{font-size:10px}
     .log{height:110px}
     .modebar .mode{min-width:0;letter-spacing:1px;padding:9px 4px;font-size:11px}
+    .modebar{display:grid;grid-template-columns:1fr 1fr}
     .code-big{font-size:26px;letter-spacing:6px}
   }
 </style>
@@ -273,6 +274,7 @@
 
   <div class="modebar" id="modeBar">
     <button class="mode active" data-mode="place">DESPLEGAR</button>
+    <button class="mode" data-mode="move">MOVER</button>
     <button class="mode" data-mode="merge">FUSIONAR ▲ NIVEL</button>
     <button class="mode" data-mode="tech">TECNOLOGÍA</button>
   </div>
@@ -367,6 +369,7 @@ const G = {
   seed:0, mySeedPart:0, foeSeedPart:0,
   W:1000, H:440,
 };
+let moveSel=null;    // index of the unit picked in MOVER mode
 let mergeFirst=null; // index of first unit picked for merge (declared early: newRound references it)
 
 /* ---------- DOM helpers ---------- */
@@ -603,7 +606,7 @@ function newRound(first){
   if(!first){ G.gold += G.income; }
   G.myPending=[];
   G.myReady=false; G.foeReady=false; G.foeDeploy=null; G.foeTech={};
-  G.selected=null; G.mode='place'; mergeFirst=null;
+  G.selected=null; G.mode='place'; mergeFirst=null; moveSel=null;
   G.phase='plan';
   document.querySelectorAll('.modebar .mode').forEach(b=>b.classList.toggle('active',b.dataset.mode==='place'));
   updateHUD();
@@ -661,11 +664,13 @@ function renderShop(){
     let cost = G.mode==='tech' ? u.tech.cost : u.cost;
     let can = G.gold>=cost;
     if(G.mode==='tech' && hasTech) can=false;
+    if(G.mode==='move') can=false;
     c.classList.toggle('cant',!can);
   });
 }
 function clickShop(k){
   const u=UNITS[k];
+  if(G.mode==='move'){ toast('En MOVER tocá una unidad en el campo'); return; }
   if(G.mode==='tech'){
     if(G.myTech[k]){ toast('Ya la tenés'); return; }
     if(G.gold<u.tech.cost){ toast('Créditos insuficientes'); return; }
@@ -683,6 +688,7 @@ function clickShop(k){
 }
 function updateSelHint(){
   const h=$('selHint');
+  if(G.mode==='move'){ h.textContent = moveSel===null ? 'Tocá una de tus unidades en el campo para moverla.' : 'Ahora tocá tu mitad del campo para ponerla ahí (o tocala de nuevo para soltarla).'; return; }
   if(G.mode==='tech'){ h.textContent='Tocá una unidad para investigar su tecnología (afecta a todas tus unidades de ese tipo).'; return; }
   if(!G.selected){
     h.textContent = G.mode==='merge'
@@ -732,6 +738,7 @@ field.addEventListener('pointerup', e=>{
 function onFieldTap(p){
   if(G.phase!=='plan' || G.myReady) return;
   if(G.mode==='merge'){ handleMerge(p); return; }
+  if(G.mode==='move'){ handleMove(p); return; }
   if(G.mode!=='place' || !G.selected) return;
   if(p.y < G.H*0.52){ toast('Desplegá en tu mitad (abajo)'); return; }
   const u=UNITS[G.selected];
@@ -743,6 +750,24 @@ function onFieldTap(p){
   G.myPending.push({kind:'place',entry,cost:u.cost});
   if(G.gold<u.cost){ G.selected=null; updateSelHint(); }
   updateHUD(); renderShop(); drawField(null);
+}
+
+// MOVER: tap one of your units, then tap where it should go. Free (no credits), undoable.
+// Tapping within finger-reach of ANOTHER unit switches the selection instead of moving.
+function handleMove(p){
+  const near=nearestMyUnit(p);
+  if(moveSel===null){
+    if(near<0){ toast('No tocaste ninguna unidad tuya'); return; }
+    moveSel=near; updateSelHint(); drawField(null,moveSel); return;
+  }
+  if(near===moveSel){ moveSel=null; updateSelHint(); drawField(null); return; }
+  if(near>=0){ moveSel=near; updateSelHint(); drawField(null,moveSel); return; }
+  if(p.y < G.H*0.52){ toast('Ponela en tu mitad (abajo)'); return; }
+  const d=G.myDeploy[moveSel], mx=18/V.sx, my=18/V.sy;
+  const nx=Math.max(mx,Math.min(G.W-mx,p.x)), ny=Math.max(G.H*0.54,Math.min(G.H-my,p.y));
+  G.myPending.push({kind:'move',entry:d,x:d.x,y:d.y});
+  d.x=nx; d.y=ny;
+  moveSel=null; updateSelHint(); drawField(null);
 }
 
 // hit radius is measured in CSS pixels (finger-sized), whatever the canvas scale
@@ -776,14 +801,17 @@ function handleMerge(p){
   mergeFirst=null; updateSelHint(); updateHUD(); renderShop(); drawField(null);
 }
 
-$('btnUndo').onclick=()=>{
+function undoLast(){
+  if(G.phase!=='plan'||G.myReady) return;
   if(!G.myPending.length){ toast('Nada que deshacer esta ronda'); return; }
   const a=G.myPending.pop();
   if(a.kind==='place'){ const i=G.myDeploy.indexOf(a.entry); if(i>=0)G.myDeploy.splice(i,1); G.gold+=a.cost; }
+  else if(a.kind==='move'){ a.entry.x=a.x; a.entry.y=a.y; }
   else if(a.kind==='tech'){ G.myTech[a.id]=false; delete G.myTech[a.id]; G.gold+=a.cost; }
   else if(a.kind==='merge'){ a.leveled.lvl-=1; if(a.prevFrac!=null)a.leveled.dmgFrac=a.prevFrac; else delete a.leveled.dmgFrac; G.myDeploy.push(a.restore); }
-  mergeFirst=null; updateHUD(); renderShop(); drawField(null);
-};
+  mergeFirst=null; moveSel=null; updateHUD(); renderShop(); drawField(null);
+}
+$('btnUndo').onclick=undoLast;
 
 // mode buttons
 document.querySelectorAll('.modebar .mode').forEach(btn=>{
@@ -791,7 +819,7 @@ document.querySelectorAll('.modebar .mode').forEach(btn=>{
     if(G.myReady) return;
     document.querySelectorAll('.modebar .mode').forEach(b=>b.classList.remove('active'));
     btn.classList.add('active');
-    G.mode=btn.dataset.mode; G.selected=null; mergeFirst=null;
+    G.mode=btn.dataset.mode; G.selected=null; mergeFirst=null; moveSel=null;
     updateSelHint(); renderShop(); drawField(null);
   };
 });
