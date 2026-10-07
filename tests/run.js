@@ -4,6 +4,7 @@ const vm = require('vm');
 const { loadGame, extractScript, HTML_PATH } = require('./load');
 
 let failed = 0;
+const pending = [];                                   // tests asíncronos (códec con streams)
 function check(name, ok, detail = '') {
   console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? '  — ' + detail : ''}`);
   if (!ok) failed++;
@@ -500,6 +501,108 @@ for (const budget of TRI_BUDGETS) for (const [a, b] of TRI) {
   check('revancha: pedido mutuo, semillas nuevas idénticas, estado limpio y juego normal', fail.length === 0, fail.join('; '));
 }
 
+// (p) replays: grabación idéntica en ambas máquinas, re-simulación exacta, códec, entrada hostil, visor y almacenamiento
+pending.push((async () => {
+  const { makePair, handshake } = require('./net');
+  const zlib = require('zlib');
+  const fail = [];
+  const p = makePair({ raf: true }); handshake(p);
+  const H = p.host, Gu = p.guest;
+  H.G.battleSpeed = 4; Gu.G.battleSpeed = 4;
+  const run = (ms) => { for (let t = 0; t < ms; t += 250) { p.clock.advance(250); p.pump(); } };
+  const add = (m, y) => m.G.myDeploy.push({ id: 'warden', lvl: 1, x: 300.4, y }, { id: 'longbow', lvl: 1, x: 612.7, y }, { id: 'crawler', lvl: 1, x: 450.1, y: y - 20 });
+  let g = 0;
+  while (!(H.G.phase === 'over' && Gu.G.phase === 'over') && g++ < 400) {
+    for (const m of [H, Gu]) if (m.G.phase === 'plan' && !m.G.myReady) { if (m.G.myDeploy.length < 3) add(m, 400); m.confirmReady(); }
+    run(500);
+  }
+  const rh = H.Rec.cur, rg = Gu.Rec.cur;
+  if (!rh.rounds.length) fail.push('no se grabó ninguna ronda');
+  if (JSON.stringify(rh.rounds) !== JSON.stringify(rg.rounds)) fail.push('host y guest grabaron rondas distintas');
+  if (rh.host !== 'H' || rh.guest !== 'G' || rg.host !== 'H' || rg.guest !== 'G') fail.push(`nombres: ${rh.host}/${rh.guest} y ${rg.host}/${rg.guest}`);
+  // re-simular lo grabado da exactamente lo que se jugó
+  rh.rounds.forEach((r, k) => {
+    const x = H.simulate(r.hd, r.gd, r.ht, r.gt, r.seed), played = p.log.host[k];
+    if (x.winner !== r.w || x.winner !== played.winner || x.hostHP !== played.hostHP || x.guestHP !== played.guestHP) fail.push(`ronda ${k + 1}: la re-simulación difiere de lo jugado`);
+  });
+  // se guardó en el almacenamiento y sobrevive al saneamiento sin cambios
+  const stored = H.replaysLoad();
+  if (stored.length !== 1 || stored[0].rounds.length !== rh.rounds.length) fail.push('no quedó guardado en localStorage');
+  const clean = H.sanitizeReplay(JSON.parse(JSON.stringify(rh)));
+  if (!clean || JSON.stringify(clean.rounds) !== JSON.stringify(rh.rounds)) fail.push('sanitizeReplay alteró una grabación legítima (rompería el determinismo)');
+  // códec: gzip y fallback sin CompressionStream
+  const codec = async () => {
+    const f2 = [];
+    const code = await H.replayEncode(rh);
+    if (!code.startsWith('g1.')) f2.push('no usó gzip');
+    const back = await H.replayDecode(code);
+    if (!back || JSON.stringify(back.rounds) !== JSON.stringify(rh.rounds)) f2.push('ida y vuelta gzip distinta');
+    if (code.length > 14000) f2.push('código demasiado largo: ' + code.length);
+    const viaLink = await H.replayDecode('https://x.test/index.html#replay=' + code);
+    if (!viaLink) f2.push('no decodificó el enlace completo');
+    p.hl.ctx.CompressionStream = undefined;
+    const plain = await H.replayEncode(rh);
+    if (!plain.startsWith('p1.')) f2.push('sin CompressionStream debía usar el formato plano');
+    const back2 = await H.replayDecode(plain);
+    if (!back2 || JSON.stringify(back2.rounds) !== JSON.stringify(rh.rounds)) f2.push('ida y vuelta plana distinta');
+    p.hl.ctx.CompressionStream = CompressionStream;
+    // entrada hostil
+    const bad = [null, '', 'basura', 'g1.', 'g1.AAAA', 'p1.' + Buffer.from('no es json').toString('base64url'), 'x1.' + code.slice(3), 'g1.' + 'A'.repeat(80000)];
+    for (const b of bad) if (await H.replayDecode(b) !== null) f2.push('aceptó entrada inválida: ' + String(b).slice(0, 20));
+    const bomb = 'g1.' + zlib.gzipSync(Buffer.alloc(5_000_000, 32)).toString('base64url');          // bomba de descompresión (5MB)
+    if (await H.replayDecode(bomb) !== null) f2.push('aceptó una bomba de descompresión');
+    const mk = (mut) => { const o = JSON.parse(JSON.stringify(rh)); mut(o); return 'p1.' + Buffer.from(JSON.stringify(o)).toString('base64url'); };
+    for (const [n, mut] of [['seed NaN', o => { o.rounds[0].seed = 'x'; }], ['demasiadas rondas', o => { o.rounds = new Array(30).fill(o.rounds[0]); }], ['sin rondas', o => { o.rounds = []; }], ['versión', o => { o.v = 9; }], ['deploy no es lista', o => { o.rounds[0].hd = 'x'; }]])
+      if (await H.replayDecode(mk(mut)) !== null) f2.push('aceptó replay inválido: ' + n);
+    const evil = await H.replayDecode(mk(o => { o.host = '<img src=x onerror=alert(1)>'; o.rounds[0].hd.push({ id: '__proto__', x: 1, y: 300 }, { id: 'warden', lvl: 9999, x: 1e9, y: -5 }); }));
+    if (!evil || evil.rounds[0].hd.length !== rh.rounds[0].hd.length + 1 || evil.rounds[0].hd.some(d => d.lvl > 8 || d.x > 1000 || d.y < 220)) f2.push('no saneó unidades hostiles dentro del replay');
+    return f2;
+  };
+  {
+    const f2 = await codec();
+    fail.push(...f2);
+    // visor: reproduce, autoavanza, permite saltar, bloquea si hay sala y restaura el estado
+    const v = makePair({ raf: true }); const V = v.host;
+    V.G.phase = 'lobby'; V.G.name = 'YO'; V.G.foeName = 'OTRO'; V.G.isHost = false; V.G.peer = {};
+    if (V.replayOpen(rh)) fail.push('el visor abrió con una sala activa');
+    V.G.peer = null;
+    V.G.battleSpeed = 4;
+    if (!V.replayOpen(JSON.parse(JSON.stringify(rh)))) fail.push('el visor no abrió');
+    if (V.G.phase !== 'replay') fail.push('fase del visor: ' + V.G.phase);
+    v.clock.advance(60000);
+    if (V.RP.round !== rh.rounds.length - 1) fail.push(`no avanzó solo hasta la última ronda (${V.RP.round}/${rh.rounds.length - 1})`);
+    V.replaySeek(3); if (V.RP.i !== 3 || V.RP.playing) fail.push('replaySeek no pausó en el frame pedido');
+    V.replayToggle(); if (!V.RP.playing) fail.push('replayToggle no reanudó');
+    V.replayClose();
+    if (V.G.phase !== 'lobby' || V.G.name !== 'YO' || V.G.foeName !== 'OTRO' || V.G.isHost !== false || V.G._bt) fail.push('replayClose no restauró el estado');
+    // almacenamiento: tope de 12, y no se rompe si el almacenamiento falla
+    for (let i = 0; i < 15; i++) V.replaySave({ ...JSON.parse(JSON.stringify(rh)), id: 'id' + i });
+    if (V.replaysLoad().length !== V.REPLAY_MAX) fail.push('tope de replays: ' + V.replaysLoad().length);
+    const t = makePair({ raf: true, storageThrows: true });
+    try { t.host.replaySave(JSON.parse(JSON.stringify(rh))); } catch (e) { fail.push('replaySave lanzó con almacenamiento lleno: ' + e.message); }
+    check('replays: grabación idéntica, re-simulación exacta, códec, entrada hostil, visor y almacenamiento', fail.length === 0, fail.join('; '));
+  }
+})());
+
+// (q) huella de la simulación: si las reglas cambian, los replays viejos dejan de coincidir -> hay que subir SIM_VERSION
+{
+  const api2 = loadGame(['SIM_VERSION', 'simulate', 'makeRNG', 'UNITS']).api;
+  const rng = api2.makeRNG(20240607), ids = Object.keys(api2.UNITS), outs = [];
+  for (let k = 0; k < 24; k++) {
+    const mk = () => Array.from({ length: 2 + (k % 5) }, () => ({ id: ids[Math.floor(rng() * ids.length)], lvl: 1 + Math.floor(rng() * 3), x: 40 + rng() * 920, y: 240 + rng() * 180 }));
+    const r = api2.simulate(mk(), mk(), k % 2 ? { warden: true, crawler: true } : {}, k % 3 ? { longbow: true } : {}, 500 + k);
+    outs.push([r.winner, r.hostHP, r.guestHP, JSON.stringify(r.hostSurv), JSON.stringify(r.guestSurv), r.frames.length]);
+  }
+  let h = 0x811c9dc5; for (const ch of JSON.stringify(outs)) { h ^= ch.charCodeAt(0); h = Math.imul(h, 0x01000193) >>> 0; }
+  const hash = h.toString(16), file = require('path').join(__dirname, 'sim-fingerprint.json');
+  if (process.argv.includes('--update-fingerprint')) { fs.writeFileSync(file, JSON.stringify({ simVersion: api2.SIM_VERSION, hash }, null, 2) + '\n'); console.log('huella actualizada:', hash, 'SIM_VERSION', api2.SIM_VERSION); }
+  const saved = JSON.parse(fs.readFileSync(file, 'utf8'));
+  const same = saved.hash === hash, bumped = saved.simVersion !== api2.SIM_VERSION;
+  check('huella de simulación: cambiar las reglas exige subir SIM_VERSION', same && !bumped || (!same && bumped && false),
+    same ? (bumped ? `SIM_VERSION cambió (${saved.simVersion}→${api2.SIM_VERSION}) sin cambiar las reglas: corré --update-fingerprint` : `v${api2.SIM_VERSION} ${hash}`)
+         : `la simulación cambió (${saved.hash} → ${hash}). Subí SIM_VERSION (hoy ${api2.SIM_VERSION}) y corré: node tests/run.js --update-fingerprint`);
+}
+
 // --report: tabla de winrates entre todos los tipos y unidades
 if (process.argv.includes('--report')) {
   console.log('\nTriángulo por presupuesto (% victorias del que debería ganar):');
@@ -540,5 +643,7 @@ if (process.argv.includes('--report')) {
   }
 }
 
-console.log(failed ? `\n${failed} test(s) fallaron` : '\nTodo OK');
-process.exit(failed ? 1 : 0);
+Promise.all(pending).then(() => {
+  console.log(failed ? `\n${failed} test(s) fallaron` : '\nTodo OK');
+  process.exit(failed ? 1 : 0);
+});

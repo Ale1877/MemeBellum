@@ -2,7 +2,7 @@
 // conectadas por una cola de mensajes en memoria (JSON, como WebRTC) y un reloj falso compartido.
 const { loadGame } = require('./load');
 
-const NAMES = ['simulate','UNITS','G','makeRNG','onData','send','startMatch','tryResolve','newRound','finishRound','playback','confirmReady','sanitizeDeploy','sanitizeTech','onFoeReady','connectionLost','leaveToLobby','onIncoming','onFieldTap','undoLast','P','FXQ','setFx','drawBattle','HAS_RAF','spriteFor','spriteDir','AUD','sfx','audioInit','setSnd','buildSummary','renderSummary','expand','startPlanTimer','tickPlanTimer','requestRematch'];
+const NAMES = ['simulate','UNITS','G','makeRNG','onData','send','startMatch','tryResolve','newRound','finishRound','playback','confirmReady','sanitizeDeploy','sanitizeTech','onFoeReady','connectionLost','leaveToLobby','onIncoming','onFieldTap','undoLast','P','FXQ','setFx','drawBattle','HAS_RAF','spriteFor','spriteDir','AUD','sfx','audioInit','setSnd','buildSummary','renderSummary','expand','startPlanTimer','tickPlanTimer','requestRematch','Rec','replaysLoad','replaySave','sanitizeReplay','replayEncode','replayDecode','replayOpen','replayClose','replayToggle','replaySeek','replayLoadRound','RP','SIM_VERSION','replayLink','replayImport','REPLAY_MAX'];
 
 function makeClock() {
   let now = 0, id = 1; const tm = new Map();
@@ -31,8 +31,10 @@ function makePair(opts = {}) {
   const sb = { setTimeout: clock.setTimeout, clearTimeout: clock.clearTimeout, setInterval: clock.setInterval, clearInterval: clock.clearInterval };
   let audio = null;
   if (opts.audio) { audio = require('./fakeaudio').makeFakeAudio(clock); sb.AudioContext = audio.FakeAC; }
+  const store = () => { const m = new Map(); return { getItem: k => (m.has(k) ? m.get(k) : null), setItem: (k, v) => { if (opts.storageThrows) throw new Error('cuota'); m.set(k, v); }, removeItem: k => m.delete(k), m }; };
+  const stores = { host: store(), guest: store() };
   if (opts.raf) { sb.requestAnimationFrame = cb => clock.setTimeout(() => cb(clock.now), 16); sb.performance = { now: () => clock.now }; }   // ~60fps
-  const hl = loadGame(NAMES, { ...sb }), gl = loadGame(NAMES, { ...sb });
+  const hl = loadGame(NAMES, { ...sb, localStorage: stores.host }), gl = loadGame(NAMES, { ...sb, localStorage: stores.guest });
   const host = hl.api, guest = gl.api;
   const queue = [];
   const log = { host: [], guest: [], lost: { host: 0, guest: 0 }, battleDraws: { host: 0, guest: 0 } };                 // cada simulate() que corre cada máquina
@@ -56,7 +58,7 @@ function makePair(opts = {}) {
   host.G.isHost = true;  host.G.name = 'H'; host.G.conn = { open: true, send: m => queue.push({ to: guest, m: JSON.parse(JSON.stringify(m)) }) };
   guest.G.isHost = false; guest.G.name = 'G'; guest.G.conn = { open: true, send: m => queue.push({ to: host, m: JSON.parse(JSON.stringify(m)) }) };
   function pump() { while (queue.length) { const { to, m } = queue.shift(); to.onData(m); } }
-  return { host, guest, queue, pump, clock, log, hl, gl, audio };
+  return { host, guest, queue, pump, clock, log, hl, gl, audio, stores };
 }
 
 // Hace el handshake real: cada lado manda 'hello' al abrir la conexión.

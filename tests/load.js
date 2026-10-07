@@ -40,11 +40,12 @@ function stubEl() {
 function makeContext(extraSandbox = {}) {
   const els = new Map();                                // como el DOM real: mismo id, mismo elemento
   const sandbox = {
-    document: { getElementById: id => { if (!els.has(id)) els.set(id, stubEl()); return els.get(id); }, querySelectorAll: () => [], createElement: () => stubEl(), addEventListener() {} },
+    document: { body: stubEl(), addEventListener() {}, getElementById: id => { if (!els.has(id)) els.set(id, stubEl()); return els.get(id); }, querySelectorAll: () => [], createElement: () => stubEl(), addEventListener() {} },
     window: { addEventListener() {} },
     navigator: {},
     console, setTimeout, clearTimeout, setInterval, clearInterval,
     Peer: function () { throw new Error('Peer no disponible en tests'); },
+    TextEncoder, TextDecoder, btoa, atob, CompressionStream, DecompressionStream,   // códec de replays
     ...extraSandbox,
   };
   sandbox.window.setTimeout = setTimeout;

@@ -197,12 +197,29 @@
     .modebar{display:grid;grid-template-columns:1fr 1fr}
     .bar{display:grid;grid-template-columns:1fr 1fr}
     .bar button{min-width:0;letter-spacing:1px;font-size:12px}
-    .bar #btnUndo,.bar #btnLobby,.bar #btnRematch{grid-column:1/-1}
+    .bar #btnUndo,.bar #btnLobby,.bar #btnRematch,.bar #btnShareReplay{grid-column:1/-1}
     .code-big{font-size:26px;letter-spacing:6px}
   }
 
 
 
+
+  /* ---------- Replays ---------- */
+  .rp-row{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--line)}
+  .rp-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;font-size:12px}
+  .rp-info b{color:var(--ink);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .rp-info span{color:var(--ink-dim);font-size:11px}
+  .rp-row button{width:auto;margin:0;padding:8px 12px;flex:0 0 auto}
+  #replayCard.hide{display:none}
+  .replaybar{display:none;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+  .replaybar button{width:auto;margin:0;padding:8px 14px;flex:0 0 auto}
+  .replaybar input[type=range]{flex:1 1 160px;min-width:120px;accent-color:var(--phos)}
+  .replaybar #rpInfo{font-size:12px;color:var(--ink-dim);letter-spacing:1px;white-space:nowrap}
+  body.replaying .replaybar{display:flex}
+  body.replaying .shop,body.replaying .modebar,body.replaying #selHint,body.replaying .legend,body.replaying #planTimer,
+  body.replaying .topbar #btnReady,body.replaying #btnUndo,body.replaying #btnRematch,body.replaying #btnLobby,body.replaying #btnShareReplay,
+  body.replaying .stat.cred{display:none !important}
+  @media (max-width:600px){ .replaybar #rpSeek{order:9;flex-basis:100%} .rp-row{flex-wrap:wrap} }
   /* ---------- Planning timer ---------- */
   .timer{display:flex;align-items:center;gap:10px;margin:-2px 0 10px;font-size:12px;color:var(--ink-dim);letter-spacing:1px;min-height:16px}
   .timer .track{flex:1;height:3px;background:var(--line);overflow:hidden}
@@ -282,6 +299,14 @@
       <div class="phase-note" id="joinStatus"></div>
     </div>
   </div>
+  <div class="card" id="replayCard" style="margin-top:18px">
+    <h2>REPLAYS</h2>
+    <p class="hint">Tus partidas se guardan en este dispositivo. Pegá un enlace o código para ver el replay de otro jugador.</p>
+    <div id="replayList"></div>
+    <label class="fld">ENLACE O CÓDIGO DE REPLAY</label>
+    <input type="text" id="replayCode" placeholder="pegá acá un enlace de replay" autocomplete="off" autocorrect="off" spellcheck="false">
+    <button class="ghost" id="btnReplayOpen">VER REPLAY</button>
+  </div>
   <p class="mini" style="margin-top:22px;max-width:620px;margin-left:auto;margin-right:auto;line-height:1.6">
     Sin cuentas, sin servidor. Los navegadores se conectan directo (WebRTC). El combate se simula igual en ambos lados con la misma semilla, así que los dos ven el mismo resultado.
   </p>
@@ -292,10 +317,10 @@
   <div class="hud">
     <div class="seg">
       <div class="stat"><span class="lbl">RONDA</span><b id="hRound">1</b></div>
-      <div class="stat"><span class="lbl">CRÉDITOS</span><b id="hGold">0</b></div>
-      <div class="stat"><span class="lbl">INGRESO/RONDA</span><b id="hInc">0</b></div>
-      <div class="stat"><span class="lbl">MIS VICTORIAS</span><b id="hWinMe">0</b></div>
-      <div class="stat"><span class="lbl">RIVAL</span><b id="hWinFoe" style="color:var(--red)">0</b></div>
+      <div class="stat cred"><span class="lbl">CRÉDITOS</span><b id="hGold">0</b></div>
+      <div class="stat cred"><span class="lbl">INGRESO/RONDA</span><b id="hInc">0</b></div>
+      <div class="stat"><span class="lbl" id="lblWinMe">MIS VICTORIAS</span><b id="hWinMe">0</b></div>
+      <div class="stat"><span class="lbl" id="lblWinFoe">RIVAL</span><b id="hWinFoe" style="color:var(--red)">0</b></div>
     </div>
     <div class="vs-tag"><span class="me" id="tagMe">YO</span> VS <span class="foe" id="tagFoe">RIVAL</span></div>
   </div>
@@ -309,6 +334,16 @@
       <button class="spd" data-spd="2">2×</button>
       <button class="spd" data-spd="4">4×</button>
     </div>
+  </div>
+
+  <div class="replaybar" id="replayBar">
+    <button id="rpPrev" class="ghost" aria-label="Ronda anterior">⏮</button>
+    <button id="rpPlay" aria-label="Pausa / reproducir">⏸</button>
+    <button id="rpNext" class="ghost" aria-label="Ronda siguiente">⏭</button>
+    <input type="range" id="rpSeek" min="0" max="0" value="0" aria-label="Línea de tiempo">
+    <span id="rpInfo"></span>
+    <button id="rpShare" class="ghost">↗ COMPARTIR</button>
+    <button id="rpExit" class="danger">SALIR</button>
   </div>
 
   <div class="timer" id="planTimer" hidden><span id="timerTxt"></span><div class="track"><i id="timerBar"></i></div></div>
@@ -337,6 +372,7 @@
     <button class="ghost" id="btnFx">EFECTOS: ALTO</button>
     <button class="ghost" id="btnSnd">SONIDO: ON</button>
     <button id="btnRematch" hidden>REVANCHA</button>
+    <button class="ghost" id="btnShareReplay" hidden>COMPARTIR REPLAY</button>
     <button class="danger" id="btnLobby" style="display:none">VOLVER AL LOBBY</button>
   </div>
   <div class="card summary" id="summary" hidden></div>
@@ -454,6 +490,7 @@ function hostCreate(){
   const name=$('playerName').value.trim();
   if(!name){ toast('Poné tu nombre primero'); return; }
   G.name=name; G.isHost=true;
+  $('replayCard').classList.add('hide');
   const code=randCode(); G.code=code;
   $('roomCode').textContent=code;
   $('createBox').style.display='block';
@@ -491,6 +528,7 @@ function joinRoom(){
   const code=$('joinCode').value.trim().toUpperCase();
   if(code.length<4){ toast('Código inválido'); return; }
   G.name=name; G.isHost=false; G.code=code;
+  $('replayCard').classList.add('hide');
   $('joinStatus').textContent='Conectando…';
   $('btnJoin').disabled=true;
   setChip(false,'CONECTANDO');
@@ -508,7 +546,7 @@ function joinFailed(why){
   clearTimeout(G._joinT);
   $('joinStatus').textContent='No se pudo conectar ('+why+')';
   setChip(false,'ERROR');
-  $('btnJoin').disabled=false;
+  $('btnJoin').disabled=false; $('replayCard').classList.remove('hide');
   try{ if(G.conn) G.conn.close(); }catch(_){}
   try{ if(G.peer) G.peer.destroy(); }catch(_){}
   G.conn=null; G.peer=null;
@@ -614,11 +652,11 @@ function leaveToLobby(){
   Object.assign(G,{ phase:'lobby', isHost:false, foeName:'RIVAL', myReady:false, foeReady:false, foeDeploy:null,
     foeTech:{}, foeLastDeploy:null, foeLastTech:{}, pendingReady:null, myDeploy:[], myPending:[], myTech:{},
     code:'', token:'', sentReady:null, foeAway:false, rematchMe:false, foeRematch:false });
-  $('btnRematch').hidden=true;
+  $('btnRematch').hidden=true; $('btnShareReplay').hidden=true;
   $('log').innerHTML='';
   hideSummary();
   $('createBox').style.display='none';
-  $('btnCreate').disabled=false; $('btnJoin').disabled=false;
+  $('btnCreate').disabled=false; $('btnJoin').disabled=false; $('replayCard').classList.remove('hide'); replayListRender();
   $('joinStatus').textContent='';
   $('btnLobby').style.display='none';
   setChip(false,'OFFLINE');
@@ -727,8 +765,9 @@ function startMatch(){
   G.seed = combineSeed(G.isHost?G.mySeedPart:G.foeSeedPart, G.isHost?G.foeSeedPart:G.mySeedPart);
   G.round=1; G.income=INCOME_START; G.gold=G.income; G.winsMe=0; G.winsFoe=0;
   G.myDeploy=[]; G.myPending=[]; G.myTech={}; G.foeTech={}; G.pendingReady=null; G.sentReady=null; G.foeAway=false; endReconnect();
+  recStart();
   G.foeLastDeploy=null; G.foeLastTech={}; G.rematchMe=false; G.foeRematch=false; G.mode='place';   // a fresh match must not inherit intel/rematch state
-  $('btnRematch').hidden=true;
+  $('btnRematch').hidden=true; $('btnShareReplay').hidden=true;
   $('tagMe').textContent=G.name.toUpperCase();
   $('tagFoe').textContent=G.foeName.toUpperCase();
   show('scrGame');
@@ -919,7 +958,7 @@ function onFieldTap(p){
   if(G.gold<u.cost){ toast('Sin créditos'); G.selected=null; renderShop(); return; }
   G.gold-=u.cost;
   const mx=18/V.sx, my=18/V.sy;                  // keep the sprite fully on screen at any canvas size
-  const entry={id:u.id,lvl:1,x:Math.max(mx,Math.min(G.W-mx,p.x)),y:Math.max(G.H*0.54,Math.min(G.H-my,p.y))};
+  const entry={id:u.id,lvl:1,x:q1(Math.max(mx,Math.min(G.W-mx,p.x))),y:q1(Math.max(G.H*0.54,Math.min(G.H-my,p.y)))};
   G.myDeploy.push(entry);
   G.myPending.push({kind:'place',entry,cost:u.cost});
   if(G.gold<u.cost){ G.selected=null; updateSelHint(); }
@@ -939,7 +978,7 @@ function handleMove(p){
   if(near>=0){ moveSel=near; updateSelHint(); drawField(null,moveSel); return; }
   if(p.y < G.H*0.52){ toast('Ponela en tu mitad (abajo)'); return; }
   const d=G.myDeploy[moveSel], mx=18/V.sx, my=18/V.sy;
-  const nx=Math.max(mx,Math.min(G.W-mx,p.x)), ny=Math.max(G.H*0.54,Math.min(G.H-my,p.y));
+  const nx=q1(Math.max(mx,Math.min(G.W-mx,p.x))), ny=q1(Math.max(G.H*0.54,Math.min(G.H-my,p.y)));
   G.myPending.push({kind:'move',entry:d,x:d.x,y:d.y});
   d.x=nx; d.y=ny;
   moveSel=null; updateSelHint(); drawField(null); fxPlace(nx*V.sx,ny*V.sy,0); sfx('place');
@@ -1505,7 +1544,9 @@ function tryResolve(){
   const guestDeploy= G.isHost ? G.foeDeploy : G.myDeploy;
   const hostTech   = G.isHost ? G.myTech : G.foeTech;
   const guestTech  = G.isHost ? G.foeTech : G.myTech;
-  const result = simulate(hostDeploy, guestDeploy, hostTech, guestTech, G.seed + G.round*7919);
+  const simSeed = G.seed + G.round*7919;
+  const result = simulate(hostDeploy, guestDeploy, hostTech, guestTech, simSeed);
+  recRound(simSeed, hostDeploy, guestDeploy, hostTech, guestTech, result);   // the whole round is reproducible from these inputs
   playback(result);
 }
 
@@ -1617,6 +1658,14 @@ function simulate(hostDeploy, guestDeploy, hostTech, guestTech, seed){
 }
 
 /* ---------- Playback animation ---------- */
+// frame -> plain view objects (side 'me'/'foe', Y flipped for the guest); used without rAF and by tests
+function simViewOf(f,mySide,flip){
+  const vy=y=>flip?G.H-y:y;
+  return {
+    ents:f.ents.map(e=>({x:e.x,y:vy(e.y),hp:e.hp,maxhp:e.maxhp,def:e.def,lvl:e.lvl,side:e.side===mySide?'me':'foe'})),
+    shots:f.shots.map(b=>({fx:b.fx,fy:vy(b.fy),tx:b.tx,ty:vy(b.ty),s:b.side===mySide?'me':'foe'}))
+  };
+}
 let pbTimer=null;
 const PB_BASE=46; // ms per frame at 1x (higher = slower battle)
 function playback(result){
@@ -1627,17 +1676,12 @@ function playback(result){
   const frames=result.frames;
   // The sim is canonical (host bottom, guest top). Each player must see THEIR army at the
   // bottom, as they deployed it, so the guest's view is flipped vertically (draw-only).
-  const vy = y => G.isHost ? y : G.H-y;
   if(HAS_RAF){ G._bt=beginBattle(frames,myColorSide); startRender(); }
   function tick(){
     if(i>=frames.length){ clearInterval(pbTimer); pbTimer=null; endBattle(); finishRound(result,myColorSide); return; }
     const f=frames[i++];
     if(G._bt){ advanceBattle(G._bt,f); return; }       // rAF loop interpolates and draws
-    const simView={                                    // no requestAnimationFrame (e.g. tests): draw per sim frame
-      ents:f.ents.map(e=>({x:e.x,y:vy(e.y),hp:e.hp,maxhp:e.maxhp,def:e.def,lvl:e.lvl, side: e.side===myColorSide?'me':'foe'})),
-      shots:f.shots.map(b=>({fx:b.fx,fy:vy(b.fy),tx:b.tx,ty:vy(b.ty), s: b.side===myColorSide?'me':'foe'}))
-    };
-    drawField(simView);
+    drawField(simViewOf(f,myColorSide,!G.isHost));          // no requestAnimationFrame (e.g. tests): draw per sim frame
   }
   startPbTimer(tick);
   G._pbTick=tick; // keep ref so speed change can restart interval
@@ -1653,6 +1697,7 @@ document.querySelectorAll('.speed .spd').forEach(b=>{
     b.classList.add('active');
     G.battleSpeed=parseFloat(b.dataset.spd);
     if(pbTimer && G._pbTick) startPbTimer(G._pbTick); // apply live
+    if(RP.rec && RP.playing) replayStartTimer();       // same for the replay viewer
   };
 });
 
@@ -1682,7 +1727,7 @@ function finishRound(result, myColorSide){
     $('phaseNote').textContent='Partida terminada. Volvé al lobby para jugar otra.';
     $('btnReady').disabled=true; $('btnUndo').disabled=true;
     endReconnect();
-    updateRematchBtn();
+    updateRematchBtn(); $('btnShareReplay').hidden=!(Rec.cur&&Rec.cur.rounds.length);
     $('btnLobby').style.display='';   // heartbeat keeps running: a slow-playback rival must not look dead
     toast(G.winsMe>=3?'¡GANASTE EL ASEDIO!':'Perdiste el asedio');
     return;
@@ -1699,7 +1744,7 @@ function finishRound(result, myColorSide){
   G.myDeploy.forEach((d,di)=>{
     const s=mySurv[di];
     const frac = s && s.max>0 ? s.hp/s.max : 0;
-    if(frac>0.02){ d.dmgFrac=Math.min(1,frac); kept.push(d); }
+    if(frac>0.02){ d.dmgFrac=Math.min(1,Math.round(frac*1000)/1000); kept.push(d); }   // 0.1% steps keep replays compact
     else destroyed++;
   });
   G.myDeploy=kept;
@@ -1755,6 +1800,181 @@ function renderSummary(sum, round){
   box.hidden=false;
 }
 function hideSummary(){ const b=$('summary'); if(b) b.hidden=true; }
+
+/* ---------- Replays ----------
+   The sim is deterministic, so a replay is just the INPUTS of every round (seed, both deployments, both
+   tech sets): a few KB, no video, no per-frame data. Viewing = re-simulating with the same inputs. Replays
+   are recorded automatically on both machines, kept in localStorage, and shareable as a compressed link
+   (in the URL #fragment, so it never reaches any server). Anything imported is sanitized like network input. */
+const SIM_VERSION=1;      // bump whenever simulate()/UNITS/TYPE_ADV/lvlMult change (tests/run.js enforces this)
+const REPLAY_KEY='ironsiege.replays', REPLAY_MAX=12, REPLAY_MAX_CODE=70000, REPLAY_MAX_BYTES=400000;
+const Rec={cur:null};
+const q1=v=>Math.round(v*10)/10;
+const cloneJSON=o=>JSON.parse(JSON.stringify(o));
+function recStart(){
+  Rec.cur={v:1,sim:SIM_VERSION,id:Date.now().toString(36)+randCode(),t:Date.now(),
+    host:cleanName(G.isHost?G.name:G.foeName,'HOST'),guest:cleanName(G.isHost?G.foeName:G.name,'GUEST'),rounds:[],score:[0,0]};
+}
+function recRound(seed,hd,gd,ht,gt,result){
+  const r=Rec.cur; if(!r) return;
+  r.rounds.push({seed,hd:cloneJSON(hd),gd:cloneJSON(gd),ht:cloneJSON(ht),gt:cloneJSON(gt),w:result.winner,hp:[result.hostHP,result.guestHP]});
+  if(result.winner==='host') r.score[0]++; else if(result.winner==='guest') r.score[1]++;
+  replaySave(r);                                  // saved after every round, so an interrupted match is kept too
+}
+function replaysLoad(){ try{ const a=JSON.parse(localStorage.getItem(REPLAY_KEY)||'[]'); return Array.isArray(a)?a.filter(x=>x&&typeof x==='object'&&x.id):[]; }catch(_){ return []; } }
+function replaysWrite(a){ try{ localStorage.setItem(REPLAY_KEY,JSON.stringify(a)); return true; }catch(_){ return false; } }
+function replaySave(rec){
+  if(!rec||!rec.rounds||!rec.rounds.length) return;
+  let a=replaysLoad().filter(x=>x.id!==rec.id); a.unshift(rec); a=a.slice(0,REPLAY_MAX);
+  if(!replaysWrite(a)) replaysWrite(a.slice(0,3));  // storage full: keep only the newest few
+}
+function replayDelete(id){ replaysWrite(replaysLoad().filter(x=>x.id!==id)); }
+
+// Untrusted input (shared link / pasted code / storage): rebuild a clean, bounded replay or reject it.
+function sanitizeReplay(raw){
+  if(!raw||typeof raw!=='object'||raw.v!==1||!Array.isArray(raw.rounds)||raw.rounds.length<1||raw.rounds.length>12) return null;
+  const rounds=[], score=[0,0];
+  for(const r of raw.rounds){
+    if(!r||typeof r!=='object'||typeof r.seed!=='number'||!isFinite(r.seed)) return null;
+    const hd=sanitizeDeploy(r.hd), gd=sanitizeDeploy(r.gd); if(!hd||!gd) return null;
+    const w=r.w==='host'||r.w==='guest'?r.w:'draw';
+    if(w==='host') score[0]++; else if(w==='guest') score[1]++;
+    const hp=Array.isArray(r.hp)?r.hp:[];
+    rounds.push({seed:r.seed,hd,gd,ht:sanitizeTech(r.ht),gt:sanitizeTech(r.gt),w,hp:[Math.max(0,+hp[0]||0),Math.max(0,+hp[1]||0)]});
+  }
+  return {v:1,sim:Math.max(0,Math.floor(+raw.sim)||0),id:String(raw.id||'').replace(/[^\w-]/g,'').slice(0,40)||Date.now().toString(36),
+    t:isFinite(raw.t)?+raw.t:0,host:cleanName(raw.host,'HOST'),guest:cleanName(raw.guest,'GUEST'),rounds,score};
+}
+
+/* --- codec: JSON -> gzip -> base64url ('g1.'); plain fallback ('p1.') where CompressionStream is missing --- */
+function b64url(bytes){ let s=''; for(let i=0;i<bytes.length;i+=0x8000) s+=String.fromCharCode.apply(null,bytes.subarray(i,i+0x8000)); return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,''); }
+function unb64url(str){ str=str.replace(/-/g,'+').replace(/_/g,'/'); while(str.length%4) str+='='; const bin=atob(str), u=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) u[i]=bin.charCodeAt(i); return u; }
+async function pipeBytes(bytes,Ctor,fmt,max){
+  const cs=new Ctor(fmt), w=cs.writable.getWriter(); w.write(bytes).catch(()=>{}); w.close().catch(()=>{});
+  const rd=cs.readable.getReader(), chunks=[]; let n=0;
+  for(;;){ const {done,value}=await rd.read(); if(done) break; n+=value.length; if(max&&n>max){ try{ rd.cancel(); }catch(_){} throw new Error('too big'); } chunks.push(value); }
+  const out=new Uint8Array(n); let o=0; for(const c of chunks){ out.set(c,o); o+=c.length; } return out;
+}
+async function replayEncode(rec){
+  const bytes=new TextEncoder().encode(JSON.stringify(rec));
+  if(typeof CompressionStream!=='undefined'){ try{ return 'g1.'+b64url(await pipeBytes(bytes,CompressionStream,'gzip')); }catch(_){} }
+  return 'p1.'+b64url(bytes);
+}
+async function replayDecode(input){
+  let code=String(input||'').trim(); const m=code.match(/#replay=([^&\s]+)/); if(m) code=m[1];
+  if(!code||code.length>REPLAY_MAX_CODE) return null;
+  try{
+    let bytes=unb64url(code.slice(3)), kind=code.slice(0,3);
+    if(kind==='g1.') bytes=await pipeBytes(bytes,DecompressionStream,'gzip',REPLAY_MAX_BYTES);   // bounded: no decompression bombs
+    else if(kind!=='p1.'||bytes.length>REPLAY_MAX_BYTES) return null;
+    return sanitizeReplay(JSON.parse(new TextDecoder().decode(bytes)));
+  }catch(_){ return null; }
+}
+function replayLink(code){ return location.origin+location.pathname+'#replay='+code; }
+async function shareReplay(rec){
+  if(!rec) return;
+  const code=await replayEncode(rec), url=replayLink(code);
+  if(navigator.share){ try{ await navigator.share({title:'IRON SIEGE · replay',text:`${rec.host} vs ${rec.guest} (${rec.score[0]}–${rec.score[1]})`,url}); return; }catch(e){ if(e&&e.name==='AbortError') return; } }
+  copyText(url).then(ok=>toast(ok?'Enlace del replay copiado':'No se pudo copiar el enlace'));
+}
+
+/* --- viewer: re-simulates each round from the recorded inputs and plays it with the normal renderer --- */
+const RP={rec:null,round:0,res:null,i:0,playing:false,timer:null,next:null,saved:null,mismatch:false};
+function replayOpen(rec){
+  if(!rec||G.peer||G.phase!=='lobby') return false;     // never while a room/match exists
+  RP.saved={name:G.name,foe:G.foeName,isHost:G.isHost};
+  RP.rec=rec; G.phase='replay'; G.isHost=true;           // host = "me" (green, bottom): view is not flipped
+  G.name=rec.host; G.foeName=rec.guest;
+  $('tagMe').textContent=rec.host.toUpperCase(); $('tagFoe').textContent=rec.guest.toUpperCase();
+  $('lblWinMe').textContent='VICT. '+rec.host.toUpperCase(); $('lblWinFoe').textContent='VICT. '+rec.guest.toUpperCase();
+  document.body.classList.add('replaying');
+  show('scrGame'); hideSummary(); fitCanvas();
+  if(rec.sim!==SIM_VERSION) toast('Replay de otra versión de las reglas: el resultado podría diferir');
+  replayLoadRound(0,true);
+  return true;
+}
+function replayScore(upTo){ let h=0,g=0; for(let k=0;k<upTo;k++){ const w=RP.rec.rounds[k].w; if(w==='host') h++; else if(w==='guest') g++; } return [h,g]; }
+function replayStopTimers(){ clearInterval(RP.timer); RP.timer=null; clearTimeout(RP.next); RP.next=null; }
+function replayLoadRound(k,play){
+  replayStopTimers();
+  const rec=RP.rec; k=Math.max(0,Math.min(rec.rounds.length-1,k));
+  const r=rec.rounds[k]; RP.round=k; RP.i=0;
+  RP.res=simulate(r.hd,r.gd,r.ht,r.gt,r.seed);           // same inputs, same result as when it was played
+  RP.mismatch=RP.res.winner!==r.w;
+  const [h,g]=replayScore(k); G.round=k+1; setStat('hRound',k+1); setStat('hWinMe',h); setStat('hWinFoe',g);
+  hideSummary(); pClear();
+  G._bt=HAS_RAF?beginBattle(RP.res.frames,'host'):null;
+  const sk=$('rpSeek'); sk.max=RP.res.frames.length-1; sk.value=0;
+  showBanner('RONDA '+(k+1)+' / '+rec.rounds.length,'info');
+  RP.playing=!!play; if(play) replayStartTimer(); else if(G._bt) startRender();
+  replayUI();
+}
+function replayStartTimer(){ clearInterval(RP.timer); RP.playing=true; if(G._bt){ G._bt.active=true; startRender(); } RP.timer=setInterval(replayTick,PB_BASE/G.battleSpeed); replayUI(); }
+function replayTick(){
+  const fr=RP.res.frames;
+  if(RP.i>=fr.length){ replayRoundEnd(); return; }
+  const f=fr[RP.i++];
+  if(G._bt) advanceBattle(G._bt,f); else drawField(simViewOf(f,'host',false));
+  $('rpSeek').value=RP.i-1;
+}
+function replayRoundEnd(){
+  replayStopTimers(); RP.playing=false; endBattle();
+  const k=RP.round, r=RP.rec.rounds[k], [h,g]=replayScore(k+1);
+  setStat('hWinMe',h); setStat('hWinFoe',g);
+  renderSummary(buildSummary(RP.res.stats,'host'),k+1);
+  const win=RP.res.winner==='host'?RP.rec.host:RP.res.winner==='guest'?RP.rec.guest:null;
+  showBanner(win?'VICTORIA · '+win.toUpperCase():'EMPATE', win?(RP.res.winner==='host'?'':'lose'):'draw', `${RP.res.hostHP} vs ${RP.res.guestHP} HP restante`);
+  if(RP.mismatch) toast('Este round dio un resultado distinto al original (reglas de otra versión)');
+  if(k+1<RP.rec.rounds.length) RP.next=setTimeout(()=>replayLoadRound(k+1,true),2800);
+  else RP.next=setTimeout(()=>showBanner(`FIN · ${h}–${g}`,'info'),1800);
+  replayUI();
+}
+function replayToggle(){
+  if(RP.playing){ replayStopTimers(); RP.playing=false; replayUI(); return; }
+  if(RP.i>=RP.res.frames.length) replayLoadRound(RP.round,true); else replayStartTimer();
+}
+function replaySeek(i){
+  replayStopTimers(); RP.playing=false;
+  const fr=RP.res.frames; RP.i=Math.max(0,Math.min(fr.length-1,i)); const f=fr[RP.i];
+  if(G._bt){ G._bt.active=true; G._bt.prev=f; G._bt.cur=f; pClear(); startRender(); } else drawField(simViewOf(f,'host',false));
+  replayUI();
+}
+function replayUI(){ $('rpPlay').textContent=RP.playing?'⏸':'▶'; $('rpInfo').textContent=`R${RP.round+1}/${RP.rec.rounds.length} · ${RP.rec.score[0]}–${RP.rec.score[1]}`; }
+function replayClose(){
+  if(G.phase!=='replay') return;
+  replayStopTimers(); endBattle(); G._bt=null; pClear(); hideSummary();
+  document.body.classList.remove('replaying'); field.style.transform='';
+  $('lblWinMe').textContent='MIS VICTORIAS'; $('lblWinFoe').textContent='RIVAL';
+  Object.assign(G,{phase:'lobby',name:RP.saved.name,foeName:RP.saved.foe,isHost:RP.saved.isHost,round:1,winsMe:0,winsFoe:0});
+  RP.rec=null; RP.res=null; show('scrLobby'); replayListRender();
+}
+
+/* --- lobby list --- */
+function replayListRender(){
+  const box=$('replayList'); if(!box) return;
+  box.textContent='';
+  const a=replaysLoad();
+  if(!a.length){ const p=document.createElement('p'); p.className='hint'; p.textContent='Todavía no hay partidas guardadas. Jugá una y aparecerá acá.'; box.appendChild(p); return; }
+  for(const rec0 of a){
+    const rec=sanitizeReplay(rec0); if(!rec) continue;
+    const row=document.createElement('div'); row.className='rp-row';
+    const info=document.createElement('div'); info.className='rp-info';
+    const when=rec.t?new Date(rec.t).toLocaleString([], {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'';
+    const t1=document.createElement('b'); t1.textContent=`${rec.host} vs ${rec.guest}`;
+    const t2=document.createElement('span'); t2.textContent=`${rec.score[0]}–${rec.score[1]} · ${rec.rounds.length} rondas · ${when}`;
+    info.appendChild(t1); info.appendChild(t2); row.appendChild(info);
+    for(const [label,fn,cls] of [['VER',()=>replayOpen(rec)],['↗',()=>shareReplay(rec)],['✕',()=>{ replayDelete(rec.id); replayListRender(); },'danger']]){
+      const b=document.createElement('button'); b.textContent=label; b.className=cls||'ghost'; b.onclick=fn; row.appendChild(b);
+    }
+    box.appendChild(row);
+  }
+}
+async function replayImport(text){
+  const rec=await replayDecode(text);
+  if(!rec){ toast('Ese replay no es válido'); return false; }
+  replaySave(rec);
+  return replayOpen(rec);
+}
 
 /* ---------- Unit info modal ---------- */
 const TYPE_LABEL={swarm:'ENJAMBRE',heavy:'PESADO',ranged:'RANGO',assault:'ASALTO'};
@@ -1826,6 +2046,17 @@ function esc(s){ return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;',
 $('btnCreate').onclick=hostCreate;
 $('btnJoin').onclick=joinRoom;
 $('btnLobby').onclick=leaveToLobby;
+$('btnReplayOpen').onclick=()=>{ const v=$('replayCode').value; if(!v.trim()){ toast('Pegá un enlace de replay'); return; } replayImport(v); };
+$('rpPlay').onclick=()=>{ if(RP.rec) replayToggle(); };
+$('rpPrev').onclick=()=>{ if(RP.rec) replayLoadRound(RP.round-1,true); };
+$('rpNext').onclick=()=>{ if(RP.rec) replayLoadRound(RP.round+1,true); };
+$('rpSeek').addEventListener('input',e=>{ if(RP.rec) replaySeek(+e.target.value); });
+$('rpExit').onclick=replayClose;
+$('rpShare').onclick=()=>{ if(RP.rec) shareReplay(RP.rec); };
+$('btnShareReplay').onclick=()=>{ const r=Rec.cur&&Rec.cur.rounds.length?Rec.cur:null; if(r) shareReplay(r); };
+replayListRender();
+// a shared link (…#replay=CODE) opens straight into the viewer
+try{ if(/^#replay=/.test(location.hash)) replayImport(location.hash).then(ok=>{ if(ok) history.replaceState(null,'',location.pathname+location.search); }); }catch(_){}
 $('btnRematch').onclick=requestRematch;
 $('btnSnd').onclick=()=>{ audioInit(); setSnd(!AUD.on,true); toast('Sonido: '+(AUD.on?'ON':'OFF')); sfx('click'); };
 setSnd(AUD.on,false);
