@@ -427,9 +427,11 @@ function onData(m){
 }
 
 /* ---------- Match flow ---------- */
+function combineSeed(hostPart, guestPart){ return (hostPart ^ Math.imul(guestPart,2654435761)) >>> 0; }
 function startMatch(){
-  // combined deterministic seed, identical on both machines
-  G.seed = (G.mySeedPart ^ Math.imul(G.foeSeedPart,2654435761)) >>> 0;
+  // combined deterministic seed, identical on both machines: the parts MUST be
+  // combined in canonical (host, guest) order, never in (me, foe) order.
+  G.seed = combineSeed(G.isHost?G.mySeedPart:G.foeSeedPart, G.isHost?G.foeSeedPart:G.mySeedPart);
   G.round=1; G.gold=G.income; G.winsMe=0; G.winsFoe=0;
   G.myDeploy=[]; G.myPending=[]; G.myTech={}; G.foeTech={};
   $('tagMe').textContent=G.name.toUpperCase();

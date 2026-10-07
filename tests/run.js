@@ -71,6 +71,17 @@ for (const budget of TRI_BUDGETS) for (const [a, b] of TRI) {
   check('determinismo: misma entrada, mismo resultado', same);
 }
 
+// (d) handshake: host y guest deben terminar con la MISMA semilla (regresión del bug de semilla asimétrica)
+{
+  const { makePair, handshake } = require('./net');
+  let ok = true, bad = 0;
+  for (let i = 0; i < 200; i++) {
+    const p = makePair(); handshake(p);
+    if (p.host.G.seed !== p.guest.G.seed || !p.host.G.seed) { ok = false; bad++; }
+  }
+  check('handshake: host y guest comparten la misma semilla', ok, ok ? '200 handshakes' : `${bad}/200 con semillas distintas`);
+}
+
 // --report: tabla de winrates entre todos los tipos y unidades
 if (process.argv.includes('--report')) {
   console.log('\nTriángulo por presupuesto (% victorias del que debería ganar):');
