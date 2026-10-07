@@ -202,6 +202,13 @@
   }
 
 
+
+  /* ---------- Planning timer ---------- */
+  .timer{display:flex;align-items:center;gap:10px;margin:-2px 0 10px;font-size:12px;color:var(--ink-dim);letter-spacing:1px;min-height:16px}
+  .timer .track{flex:1;height:3px;background:var(--line);overflow:hidden}
+  .timer .track i{display:block;height:100%;background:var(--phos-dim);transform-origin:left;transition:transform .5s linear}
+  .timer.warn #timerTxt{color:var(--amber)} .timer.warn .track i{background:var(--amber)}
+  .timer.crit #timerTxt{color:var(--red);animation:bump .5s ease-out infinite} .timer.crit .track i{background:var(--red)}
   /* ---------- Battle summary ---------- */
   .summary{margin-top:14px;animation:fadeIn .35s ease-out}
   .summary h3{font-family:var(--disp);font-size:12px;letter-spacing:2px;margin:0 0 8px}
@@ -303,6 +310,8 @@
       <button class="spd" data-spd="4">4×</button>
     </div>
   </div>
+
+  <div class="timer" id="planTimer" hidden><span id="timerTxt"></span><div class="track"><i id="timerBar"></i></div></div>
 
   <div class="board-wrap">
     <canvas id="field" width="1000" height="440"></canvas>
@@ -586,7 +595,7 @@ function onResumed(){
   if(G.sentReady) send(G.sentReady);              // the rival may have missed it while we were apart
 }
 function giveUpReconnect(){
-  endReconnect(); stopPlayback();
+  endReconnect(); stopPlayback(); stopPlanTimer();
   G.phase='over';
   $('btnReady').disabled=true; $('btnUndo').disabled=true;
   $('phaseNote').textContent='No se pudo reconectar. La partida no puede continuar.';
@@ -595,7 +604,7 @@ function giveUpReconnect(){
   $('btnLobby').style.display='';
 }
 function leaveToLobby(){
-  stopHeartbeat(); stopPlayback(); keepAwake(false); endReconnect();
+  stopHeartbeat(); stopPlayback(); keepAwake(false); endReconnect(); stopPlanTimer();
   const c=G.conn, pr=G.peer;
   G.conn=null; G.peer=null;                       // detach first so close events are ignored
   try{ if(c) c.close(); }catch(_){}
@@ -693,7 +702,7 @@ function onFoeReady(m){
 function applyFoeReady(m){
   if(G.foeReady) return;                          // already have this round's deploy
   const deploy=sanitizeDeploy(m.deploy);
-  if(!deploy||!deploy.length){ toast('El rival envió un despliegue inválido'); return; }
+  if(!deploy || (!deploy.length && m.deploy.length)){ toast('El rival envió un despliegue inválido'); return; }   // [] is valid (timeout with no army)
   G.foeReady=true;
   G.foeDeploy=deploy;
   G.foeTech=sanitizeTech(m.tech);
@@ -726,6 +735,7 @@ function newRound(first){
   G.myReady=false; G.foeReady=false; G.foeDeploy=null; G.foeTech={};
   G.selected=null; G.mode='place'; mergeFirst=null; moveSel=null;
   G.phase='plan';
+  startPlanTimer();
   document.querySelectorAll('.modebar .mode').forEach(b=>b.classList.toggle('active',b.dataset.mode==='place'));
   G._bt=null; pClear(); field.style.transform='';
   updateHUD();
@@ -1412,9 +1422,36 @@ function setSnd(on,persist){
 }
 
 /* ---------- Ready / resolve ---------- */
-function confirmReady(){
+/* ---------- Planning timer ----------
+   Every machine counts down on its own (wall clock, so a throttled/backgrounded tab catches up) and, when
+   time runs out, confirms whatever it has deployed. Nothing is synchronized: each side simply sends its
+   normal 'ready', so both machines still feed the sim the same input. An empty army is allowed on timeout. */
+const PLAN_FIRST=90, PLAN_NEXT=60, PLAN_WARN=15, PLAN_CRIT=5;
+let planDeadline=0, planTotal=0, planInt=null, planLastSec=-1;
+function startPlanTimer(){
+  stopPlanTimer();
+  planTotal=G.round===1?PLAN_FIRST:PLAN_NEXT; planDeadline=nowMs()+planTotal*1000; planLastSec=-1;
+  const t=$('planTimer'); if(t) t.hidden=false;
+  planInt=setInterval(tickPlanTimer,250); tickPlanTimer();
+}
+function stopPlanTimer(){ clearInterval(planInt); planInt=null; const t=$('planTimer'); if(t) t.hidden=true; }
+function tickPlanTimer(){
+  if(G.phase!=='plan'||G.myReady){ stopPlanTimer(); return; }
+  const left=Math.max(0,planDeadline-nowMs()), sec=Math.ceil(left/1000);
+  if(sec!==planLastSec){
+    planLastSec=sec;
+    $('timerTxt').textContent='⏱ '+Math.floor(sec/60)+':'+String(sec%60).padStart(2,'0');
+    $('timerBar').style.transform='scaleX('+(left/(planTotal*1000)).toFixed(3)+')';
+    const box=$('planTimer'); box.classList.toggle('warn',sec<=PLAN_WARN&&sec>PLAN_CRIT); box.classList.toggle('crit',sec<=PLAN_CRIT&&sec>0);
+    if(sec>0&&sec<=PLAN_CRIT) sfx('click');
+  }
+  if(left<=0){ toast('Tiempo agotado: se confirma tu despliegue'); confirmReady(true); }
+}
+
+function confirmReady(force){
   if(G.phase!=='plan'||G.myReady) return;
-  if(!G.myDeploy.length){ toast('Desplegá al menos una unidad'); return; }
+  if(!G.myDeploy.length && force!==true){ toast('Desplegá al menos una unidad'); return; }
+  stopPlanTimer();
   G.myReady=true; hideSummary();
   $('btnReady').disabled=true; $('btnUndo').disabled=true; $('btnReady').classList.remove('pulse');
   G.selected=null; renderShop();
@@ -1423,7 +1460,7 @@ function confirmReady(){
   $('phaseNote').textContent = G.foeReady ? 'Resolviendo combate…' : 'Despliegue confirmado. Esperando al rival…';
   tryResolve();
 }
-$('btnReady').onclick=confirmReady;
+$('btnReady').onclick=()=>confirmReady();
 
 function tryResolve(){
   if(G.phase!=='plan' || !(G.myReady && G.foeReady && G.foeDeploy)) return;
@@ -1605,7 +1642,7 @@ function finishRound(result, myColorSide){
 
   // match end?
   if(G.winsMe>=3||G.winsFoe>=3){
-    G.phase='over';
+    G.phase='over'; stopPlanTimer();
     const champ = G.winsMe>=3?G.name:G.foeName;
     const cls = G.winsMe>=3?'p1':'p2';
     logLine(`★ FIN DEL ASEDIO ★ Comandante <b class="${cls}">${esc(champ)}</b> conquista (${G.winsMe}–${G.winsFoe}).`,'win');

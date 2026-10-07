@@ -432,6 +432,39 @@ for (const budget of TRI_BUDGETS) for (const [a, b] of TRI) {
   check('audio: gesto previo, límite por sonido, tope de voces, silencio y cierre de voces', fail.length === 0, fail.join('; '));
 }
 
+// (n) temporizador de planificación: confirma solo al vencer (incluso con ejército vacío), sin tocar la simulación
+{
+  const { makePair, handshake } = require('./net');
+  const fail = [];
+  const p = makePair({ raf: true }); handshake(p);
+  const H = p.host.G, Gu = p.guest.G;
+  const run = (ms) => { for (let t = 0; t < ms; t += 500) { p.clock.advance(500); p.pump(); } };   // con tráfico: los latidos mantienen la conexión
+  H.myDeploy.push({ id: 'warden', lvl: 1, x: 300, y: 400 }, { id: 'longbow', lvl: 1, x: 600, y: 400 });   // el guest no despliega nada
+  run(80000);
+  if (H.myReady || Gu.myReady || H.phase !== 'plan') fail.push('confirmó antes de que venciera el tiempo (80s de 90s)');
+  run(11000);
+  if (!H.myReady || !Gu.myReady) fail.push(`no se auto-confirmó al vencer (${H.myReady}/${Gu.myReady})`);
+  if (Gu.sentReady && Gu.sentReady.deploy.length !== 0) fail.push('el guest debía enviar un ejército vacío');
+  let g = 0; while (H.phase === 'battle' && g++ < 5000) run(500);
+  if (p.log.host.length !== 1 || p.log.guest.length !== 1 || JSON.stringify(p.log.host) !== JSON.stringify(p.log.guest)) fail.push('simulaciones distintas con ejército vacío');
+  if (p.log.host[0].winner !== 'host') fail.push('con el guest sin ejército debía ganar el host: ' + p.log.host[0].winner);
+  run(3000);
+  if (H.phase !== 'plan' || H.round !== 2) fail.push('no pasó a la ronda 2 (' + H.phase + ' r' + H.round + ')');
+  // ronda 2: el timer es de 60s; confirmar a mano lo detiene (no se confirma dos veces)
+  H.myDeploy.length || H.myDeploy.push({ id: 'warden', lvl: 1, x: 300, y: 400 });
+  p.host.confirmReady(); p.pump();
+  const sims = p.log.host.length; run(70000);
+  if (p.log.host.length !== sims + 1) fail.push('ronda 2: simulaciones inesperadas ' + (p.log.host.length - sims));
+  // un ready vacío real del rival es válido; uno con unidades inválidas no
+  const q = makePair({ raf: true }); handshake(q);
+  q.host.onData({ t: 'ready', round: 1, deploy: [], tech: {} });
+  if (!q.host.G.foeReady) fail.push('un despliegue vacío legítimo fue rechazado');
+  const r = makePair({ raf: true }); handshake(r);
+  r.host.onData({ t: 'ready', round: 1, deploy: [{ id: 'zzz' }], tech: {} });
+  if (r.host.G.foeReady) fail.push('un despliegue de unidades inválidas fue aceptado');
+  check('temporizador: auto-confirma al vencer, acepta ejército vacío y mantiene la simulación idéntica', fail.length === 0, fail.join('; '));
+}
+
 // --report: tabla de winrates entre todos los tipos y unidades
 if (process.argv.includes('--report')) {
   console.log('\nTriángulo por presupuesto (% victorias del que debería ganar):');
