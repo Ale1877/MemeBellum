@@ -579,7 +579,7 @@ function wireConn(c){
     clearTimeout(G._joinT);
     if(c._resume){ if(G.conn===c) onResumed(); return; }
     setChip(true,'CONECTADO');
-    send({t:'hello', name:G.name});
+    send({t:'hello', name:G.name, sim:SIM_VERSION, net:NET_VERSION});   // versions: both sides must run the same rules
   });
   c.on('data', d=>{ if(G.conn===c) onData(d); });
   c.on('close', ()=>{ if(G.conn===c) connectionLost('Se cortó la conexión'); });
@@ -687,6 +687,21 @@ function leaveToLobby(){
 }
 function send(obj){ if(G.conn && G.conn.open) G.conn.send(obj); }
 
+// A rival running another build (cached old page, or just deployed) would simulate different battles and desync
+// silently, so refuse BEFORE the match starts and tell the player what to do. Old builds send no versions at all.
+function versionRefuse(m,silent){
+  const theirs=(m&&Number.isInteger(m.sim))?'v'+m.sim:'anterior';
+  const msg=`Tu rival tiene otra versión del juego (reglas ${theirs}; la tuya es v${SIM_VERSION}). Recargá la página (Ctrl+F5); si sigue igual, es el rival quien debe recargar la suya.`;
+  const c=G.conn; G.conn=null;                    // detach first so its close event is ignored
+  if(c && !silent){ try{ c.send({t:'bad_version',sim:SIM_VERSION,net:NET_VERSION}); }catch(_){} setTimeout(()=>{ try{ c.close(); }catch(_){} },250); }   // tell a current build WHY (old builds ignore it)
+  else { try{ if(c) c.close(); }catch(_){} }
+  toast('Versión distinta: recargá la página');
+  if(G.isHost){
+    if(MM.on) mmUnpair(); else if($('createWait')) $('createWait').textContent=msg+' La sala sigue abierta para otro jugador.';
+  } else if(MM.on) mmJoinFail(MM.gen);
+  else { joinFailed('versión'); $('joinStatus').textContent=msg; }
+  logLine('⚠ '+esc(msg),'');
+}
 function cleanName(n,def='RIVAL'){ return (typeof n==='string' && n.trim()) ? n.trim().slice(0,14) : def; }
 function onData(m){
   if(!m || typeof m!=='object') return;
@@ -696,8 +711,12 @@ function onData(m){
     case 'ping': break;
     case 'away': G.foeAway=true; setChip(true,'RIVAL AUSENTE'); break;
     case 'back': break;
+    case 'bad_version':                            // the other side refused us because of a version mismatch
+      if(G.phase==='lobby') versionRefuse(m,true);
+      break;
     case 'hello':
       if(G.phase!=='lobby') break;
+      if(m.sim!==SIM_VERSION || m.net!==NET_VERSION){ versionRefuse(m); break; }   // different build: the sims would silently diverge
       G.foeName=cleanName(m.name);
       if(G.isHost){ // exchange seeds: host picks base seed
         G.mySeedPart = (Math.random()*1e9)|0;
@@ -864,12 +883,14 @@ function mmWait(pr,i,gen){
   // a waiter on a higher mailbox re-scans from 0 now and then, so it can never be stranded away from another waiter
   if(i>0) mmTimer(()=>{ if(MM.on&&gen===MM.gen&&!MM.pairing){ mmKill(pr); MM.peer=null; MM.slot=-1; mmTrySlot(0,gen); } },MM_RESCAN_MS+Math.random()*2500);
 }
+// drop a half-made pairing room and go back to waiting at the mailbox (guest never arrived / was refused)
+function mmUnpair(){
+  if(!MM.on||G.phase!=='lobby') return;
+  clearTimeout(G._joinT); try{ if(G.peer) G.peer.destroy(); }catch(_){} G.peer=null; G.conn=null; G.isHost=false; G.code='';
+  MM.pairing=false; mmTickUI();
+}
 function mmHostPair(slotPeer,c,gen,reply){
-  const abort=()=>{                                                                         // guest never arrived: keep waiting
-    if(!MM.on||gen!==MM.gen||G.phase!=='lobby') return;
-    clearTimeout(G._joinT); try{ if(G.peer) G.peer.destroy(); }catch(_){} G.peer=null; G.conn=null; G.isHost=false; G.code='';
-    MM.pairing=false; reply({t:'mm_busy'}); mmTickUI();
-  };
+  const abort=()=>{ if(!MM.on||gen!==MM.gen||G.phase!=='lobby') return; mmUnpair(); reply({t:'mm_busy'}); };
   const code=randCode(); G.isHost=true;
   const room=startHosting(code,e=>{ if(e&&e.type==='unavailable-id') abort(); });
   room.on('open',()=>{ if(MM.on&&gen===MM.gen&&G.peer===room) reply({t:'mm_room',code}); });
@@ -1969,6 +1990,7 @@ function hideSummary(){ const b=$('summary'); if(b) b.hidden=true; }
    are recorded automatically on both machines, kept in localStorage, and shareable as a compressed link
    (in the URL #fragment, so it never reaches any server). Anything imported is sanitized like network input. */
 const SIM_VERSION=2;      // bump whenever simulate()/UNITS/TYPE_ADV/lvlMult change (tests/run.js enforces this)
+const NET_VERSION=1;      // bump whenever the network protocol (message formats/handshake) changes incompatibly
 const REPLAY_KEY='ironsiege.replays', REPLAY_MAX=12, REPLAY_MAX_CODE=70000, REPLAY_MAX_BYTES=400000;
 const Rec={cur:null};
 const q1=v=>Math.round(v*10)/10;

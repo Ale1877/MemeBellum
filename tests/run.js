@@ -697,6 +697,50 @@ pending.push((async () => {
   check('amigos: sala + código, unirse, código inexistente, y la búsqueda rápida convive sin colarse', fail.length === 0, fail.join('; '));
 }
 
+// (t) comprobación de versión: un rival con otra versión se rechaza ANTES de empezar (sala privada, búsqueda rápida)
+{
+  const { makePair, handshake, makeCrowd } = require('./net');
+  const fail = [];
+  const el = (m, id) => m.ctx.document.getElementById(id);
+  const oldClient = (m) => { const real = m.ctx.send; m.ctx.send = (o) => real(o && o.t === 'hello' ? { t: 'hello', name: o.name } : o); };   // un build viejo: hello sin versiones
+  const otherRules = (m) => { const real = m.ctx.send; m.ctx.send = (o) => real(o && o.t === 'hello' ? { ...o, sim: o.sim - 1 } : o); };      // mismo protocolo, otras reglas
+
+  // 1. unitario: hello con versión distinta / sin versión -> se rechaza y no hay semilla; con versión correcta -> arranca
+  for (const [label, hello] of [['sin versiones', { t: 'hello', name: 'X' }], ['otras reglas', { t: 'hello', name: 'X', sim: 1, net: 1 }], ['otro protocolo', { t: 'hello', name: 'X', sim: 2, net: 99 }]]) {
+    const p = makePair(); p.host.G.phase = 'lobby'; p.host.G.isHost = true;
+    p.host.onData(hello); p.pump();
+    if (p.host.G.phase !== 'lobby' || p.host.G.conn !== null) fail.push(`1 (${label}): no se rechazó (fase ${p.host.G.phase})`);
+    if (p.queue.length) fail.push(`1 (${label}): igual envió datos al rival`);
+  }
+  { const p = makePair(); handshake(p); if (p.host.G.phase !== 'plan' || p.guest.G.phase !== 'plan') fail.push('1: con versiones correctas debía arrancar'); }
+
+  // 2. sala privada: un invitado con build viejo falla con un mensaje claro y la sala sigue abierta para otro amigo
+  { const c = makeCrowd(3); const [A, C, D] = c.ms;
+    A.api.hostCreate(); c.run(500); const code = el(A, 'roomCode').textContent;
+    oldClient(C); el(C, 'joinCode').value = code; C.api.joinRoom(); c.run(8000);
+    if (C.G.phase !== 'lobby' || !/versión/.test(el(C, 'joinStatus').textContent) || !/Recargá/.test(el(C, 'joinStatus').textContent)) fail.push('2: el invitado viejo no vio el mensaje de versión: ' + el(C, 'joinStatus').textContent);
+    if (A.G.phase !== 'lobby' || !A.G.peer || A.G.conn) fail.push('2: la sala del anfitrión debía seguir abierta y libre');
+    el(D, 'joinCode').value = code; D.api.joinRoom(); c.run(8000);
+    if (A.G.phase !== 'plan' || D.G.phase !== 'plan' || A.G.seed !== D.G.seed) fail.push('2: un amigo compatible no pudo entrar después del rechazo'); }
+  // 3. el anfitrión es el viejo: el invitado nuevo lo rechaza
+  { const c = makeCrowd(2); const [H, G2] = c.ms;
+    oldClient(H); H.api.hostCreate(); c.run(500); el(G2, 'joinCode').value = el(H, 'roomCode').textContent; G2.api.joinRoom(); c.run(8000);
+    if (G2.G.phase !== 'lobby' || H.G.phase !== 'lobby') fail.push(`3: no debía arrancar con un anfitrión viejo (${H.G.phase}/${G2.G.phase})`);
+    if (!/versión/.test(el(G2, 'joinStatus').textContent)) fail.push('3: el invitado nuevo no explicó el motivo'); }
+  // 4. otras reglas (mismo protocolo) también se rechazan
+  { const c = makeCrowd(2); const [H, G2] = c.ms; otherRules(G2);
+    H.api.hostCreate(); c.run(500); el(G2, 'joinCode').value = el(H, 'roomCode').textContent; G2.api.joinRoom(); c.run(8000);
+    if (G2.G.phase !== 'lobby' || H.G.phase !== 'lobby') fail.push('4: arrancó con reglas distintas'); }
+  // 5. búsqueda rápida: un buscador viejo no se empareja con uno nuevo, y el nuevo sí encuentra a otro nuevo
+  { const c = makeCrowd(2); const [A, B] = c.ms; oldClient(B);
+    A.api.mmStart(); B.api.mmStart(); c.run(40000);
+    if (A.G.phase === 'plan' || B.G.phase === 'plan') fail.push('5: un buscador viejo y uno nuevo no debían emparejarse');
+    const C = c.add('Nuevo'); C.api.mmStart(); c.run(150000);
+    if (A.G.phase !== 'plan' || C.G.phase !== 'plan' || A.G.seed !== C.G.seed) fail.push(`5: los dos buscadores nuevos no se encontraron (${A.G.phase}/${C.G.phase})`);
+    if (B.G.phase !== 'lobby') fail.push('5: el buscador viejo no debía entrar en partida'); }
+  check('versión: rechaza clientes con otra versión antes de empezar (sala privada y búsqueda) y no bloquea a los compatibles', fail.length === 0, fail.join('; '));
+}
+
 // --report: tabla de winrates entre todos los tipos y unidades
 if (process.argv.includes('--report')) {
   console.log('\nTriángulo por presupuesto (% victorias del que debería ganar):');

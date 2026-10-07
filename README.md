@@ -42,10 +42,12 @@ El `<script>` está dividido en secciones con cabeceras `/* ---------- ... -----
 2. **Si cambiás las reglas** (`simulate`, `expand`, `UNITS`, `TYPE_ADV`, `lvlMult`) hay que **subir `SIM_VERSION`** y correr
    `node tests/run.js --update-fingerprint`. Un test lo exige: los replays guardados dependen de que la misma entrada dé el mismo
    resultado, y avisan cuando se grabaron con otra versión.
-3. **Sin infraestructura propia**: nada de servidores, bases de datos ni servicios pagos. El único servicio externo es el de
+3. **Compatibilidad entre builds**: el apretón de manos incluye `SIM_VERSION` (reglas) y `NET_VERSION` (protocolo). Si no coinciden
+   la conexión se rechaza con un mensaje claro ("recargá la página"). Subí `NET_VERSION` al cambiar el formato de los mensajes.
+4. **Sin infraestructura propia**: nada de servidores, bases de datos ni servicios pagos. El único servicio externo es el de
    señalización público de PeerJS.
-4. Todo lo que llega por red o por un enlace de replay se **sanea** (`sanitizeDeploy`, `sanitizeTech`, `sanitizeReplay`).
-5. El dibujo y el audio son solo de presentación: no pueden leer ni alterar el estado de la simulación.
+5. Todo lo que llega por red o por un enlace de replay se **sanea** (`sanitizeDeploy`, `sanitizeTech`, `sanitizeReplay`).
+6. El dibujo y el audio son solo de presentación: no pueden leer ni alterar el estado de la simulación.
 
 ## Tests
 

@@ -2,7 +2,7 @@
 // conectadas por una cola de mensajes en memoria (JSON, como WebRTC) y un reloj falso compartido.
 const { loadGame } = require('./load');
 
-const NAMES = ['simulate','UNITS','G','makeRNG','onData','send','startMatch','tryResolve','newRound','finishRound','playback','confirmReady','sanitizeDeploy','sanitizeTech','onFoeReady','connectionLost','leaveToLobby','onIncoming','onFieldTap','undoLast','P','FXQ','setFx','drawBattle','HAS_RAF','spriteFor','spriteDir','AUD','sfx','audioInit','setSnd','buildSummary','renderSummary','expand','startPlanTimer','tickPlanTimer','requestRematch','Rec','replaysLoad','replaySave','sanitizeReplay','replayEncode','replayDecode','replayOpen','replayClose','replayToggle','replaySeek','replayLoadRound','RP','SIM_VERSION','replayLink','replayImport','REPLAY_MAX'];
+const NAMES = ['simulate','UNITS','G','makeRNG','onData','send','startMatch','tryResolve','newRound','finishRound','playback','confirmReady','sanitizeDeploy','sanitizeTech','onFoeReady','connectionLost','leaveToLobby','onIncoming','onFieldTap','undoLast','P','FXQ','setFx','drawBattle','HAS_RAF','spriteFor','spriteDir','AUD','sfx','audioInit','setSnd','buildSummary','renderSummary','expand','startPlanTimer','tickPlanTimer','requestRematch','Rec','replaysLoad','replaySave','sanitizeReplay','replayEncode','replayDecode','replayOpen','replayClose','replayToggle','replaySeek','replayLoadRound','RP','SIM_VERSION','NET_VERSION','replayLink','replayImport','REPLAY_MAX'];
 
 function makeClock() {
   let now = 0, id = 1; const tm = new Map();
@@ -63,13 +63,14 @@ function makePair(opts = {}) {
 
 // Hace el handshake real: cada lado manda 'hello' al abrir la conexión.
 function handshake(p) {
-  p.host.send({ t: 'hello', name: p.host.G.name });
-  p.guest.send({ t: 'hello', name: p.guest.G.name });
+  const v = { sim: p.host.SIM_VERSION, net: p.host.NET_VERSION };       // como wireConn: el hello lleva las versiones
+  p.host.send({ t: 'hello', name: p.host.G.name, ...v });
+  p.guest.send({ t: 'hello', name: p.guest.G.name, ...v });
   p.pump();
 }
 
 // Dos máquinas que usan hostCreate()/joinRoom() reales sobre la red PeerJS falsa.
-const NET_NAMES = NAMES.concat(['hostCreate','joinRoom','beginReconnect','giveUpReconnect','mmStart','MM']);
+const NET_NAMES = NAMES.concat(['hostCreate','joinRoom','beginReconnect','giveUpReconnect','mmStart','MM','NET_VERSION']);
 function makeNetPair() {
   const { makeNet } = require('./fakepeer');
   const clock = makeClock(); const net = makeNet(clock);
@@ -87,7 +88,7 @@ function makeNetPair() {
   return { host: hl.api, guest: gl.api, hl, gl, clock, net, log, code, el };
 }
 // N máquinas independientes sobre la MISMA red PeerJS falsa y el mismo reloj (para matchmaking).
-const MM_NAMES = NAMES.concat(['mmStart','mmStop','mmCancel','mmRestart','MM','startMatch','hostCreate','joinRoom']);
+const MM_NAMES = NAMES.concat(['mmStart','mmStop','mmCancel','mmRestart','MM','startMatch','hostCreate','joinRoom','NET_VERSION']);
 function makeCrowd(n, opts = {}) {
   const { makeNet } = require('./fakepeer');
   const clock = makeClock(); const net = makeNet(clock);

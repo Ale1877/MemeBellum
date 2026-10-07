@@ -7,6 +7,8 @@ Se publica como sitio estático (Cloudflare Pages). Ver `README.md` para la arqu
 - **Simulación determinista**: `simulate()`/`expand()` solo usan `makeRNG(seed)`. Prohibido `Math.random`, `Date`, `performance`, orden
   de iteración inestable o lectura de estado visual dentro de la simulación. `Math.random` solo fuera de la sim.
 - **Cambiar reglas ⇒ subir `SIM_VERSION`** y `node tests/run.js --update-fingerprint` (un test lo exige; protege los replays).
+- **Cambiar el protocolo de red** (formato de mensajes o apretón de manos) ⇒ subir `NET_VERSION`. El `hello` lleva `SIM_VERSION` y
+  `NET_VERSION`: un rival con otra versión se rechaza antes de empezar (`versionRefuse`), así dos builds distintos nunca se desincronizan en silencio.
 - **Triángulo de contras** (enjambre > pesado > rango > enjambre): si tocás stats/costos, verificá con
   `node tests/run.js --report` y con una semilla distinta a la usada para ajustar.
 - **Sin servidor propio ni infraestructura paga.** Todo entrante (red, enlaces de replay) se sanea.
