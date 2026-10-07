@@ -111,6 +111,38 @@ for (const budget of TRI_BUDGETS) for (const [a, b] of TRI) {
   check('rondas: ready adelantado se bufferea y ambos simulan igual', fail.length === 0, fail.join('; ') || `2 sims idénticas en ambos lados`);
 }
 
+// (f) entrada hostil del rival: nada rompe la simulación ni la partida
+{
+  const { makePair, handshake } = require('./net');
+  const p = makePair(); handshake(p);
+  const fail = [];
+  const hostile = [
+    { id: '__proto__', x: 1, y: 300 }, { id: 'constructor', x: 1, y: 300 }, { id: 'nope', x: 1, y: 300 }, null, 5, 'x',
+    { id: 'warden', lvl: 9999, x: NaN, y: Infinity }, { id: 'crawler', lvl: -3, x: -500, y: 99999, dmgFrac: 'abc' },
+    { id: 'titan', lvl: 2, x: 500, y: 100, dmgFrac: 0.5 },
+  ];
+  const clean = p.host.sanitizeDeploy(hostile);
+  if (clean.length !== 3) fail.push('esperaba 3 unidades válidas, hay ' + clean.length);
+  for (const d of clean) {
+    if (!(d.lvl >= 1 && d.lvl <= 8) || !isFinite(d.x) || !isFinite(d.y) || d.x < 0 || d.x > 1000 || d.y < 220 || d.y > 440) fail.push('unidad fuera de rango: ' + JSON.stringify(d));
+  }
+  if (p.host.sanitizeDeploy('basura') !== null || p.host.sanitizeDeploy({}) !== null) fail.push('no-arrays deben dar null');
+  if (p.host.sanitizeDeploy(new Array(5000).fill({ id: 'crawler', x: 1, y: 300 })).length > 60) fail.push('no limita el tamaño');
+  const t = p.host.sanitizeTech({ warden: true, longbow: 'yes', __proto__: { titan: true }, hacker: true });
+  if (JSON.stringify(t) !== '{"warden":true}') fail.push('sanitizeTech: ' + JSON.stringify(t));
+  // la sim corre con la entrada saneada sin lanzar y es determinista
+  try { const a = p.host.simulate(clean, clean, {}, {}, 1), b = p.host.simulate(clean, clean, {}, {}, 1); if (JSON.stringify(a) !== JSON.stringify(b)) fail.push('sim no determinista con entrada saneada'); }
+  catch (e) { fail.push('la sim lanzó: ' + e.message); }
+  // mensajes basura por la red no cambian el estado
+  p.host.G.myDeploy.push({ id: 'warden', lvl: 1, x: 300, y: 400 });
+  for (const m of [null, 7, 'x', {}, { t: 'ready' }, { t: 'ready', round: 1, deploy: 'x' }, { t: 'ready', round: 1, deploy: [{ id: 'zzz' }] }, { t: 'seed', seed: 1 }, { t: 'hello', name: 'EVIL' }]) {
+    try { p.host.onData(m); } catch (e) { fail.push('onData lanzó con ' + JSON.stringify(m) + ': ' + e.message); }
+  }
+  if (p.host.G.foeReady) fail.push('un ready inválido marcó al rival como listo');
+  if (p.host.G.phase !== 'plan') fail.push('la fase cambió: ' + p.host.G.phase);
+  check('entrada hostil: saneada, sin crashes ni cambios de estado', fail.length === 0, fail.join('; '));
+}
+
 // --report: tabla de winrates entre todos los tipos y unidades
 if (process.argv.includes('--report')) {
   console.log('\nTriángulo por presupuesto (% victorias del que debería ganar):');

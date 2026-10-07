@@ -393,17 +393,21 @@ function wireConn(c){
 }
 function send(obj){ if(G.conn && G.conn.open) G.conn.send(obj); }
 
+function cleanName(n,def='RIVAL'){ return (typeof n==='string' && n.trim()) ? n.trim().slice(0,14) : def; }
 function onData(m){
+  if(!m || typeof m!=='object') return;
   switch(m.t){
     case 'hello':
-      G.foeName=m.name||'RIVAL';
+      if(G.phase!=='lobby') break;
+      G.foeName=cleanName(m.name);
       if(G.isHost){ // exchange seeds: host picks base seed
         G.mySeedPart = (Math.random()*1e9)|0;
         send({t:'seed', seed:G.mySeedPart, name:G.name});
       }
       break;
     case 'seed':
-      G.foeName=m.name||G.foeName;
+      if(G.phase!=='lobby') break;
+      G.foeName=cleanName(m.name,G.foeName);
       G.foeSeedPart=m.seed>>>0;
       if(!G.isHost){
         G.mySeedPart=(Math.random()*1e9)|0;
@@ -412,8 +416,9 @@ function onData(m){
       startMatch();
       break;
     case 'seed2':
+      if(G.phase!=='lobby') break;
       G.foeSeedPart=m.seed>>>0;
-      G.foeName=m.name||G.foeName;
+      G.foeName=cleanName(m.name,G.foeName);
       startMatch();
       break;
     case 'ready':
@@ -428,7 +433,28 @@ function onData(m){
 // 'ready' messages carry the round they belong to. Players watch battles at their own
 // local speed, so the rival can finish and confirm round N+1 while we are still
 // replaying round N: such messages are buffered until our own newRound(), never applied early.
+// Never trust the peer: sanitize its deploy/tech into plain, bounded, known-good data.
+// Both machines sanitize the same raw input the same way, so the sim input stays identical.
+const MAX_FOE_UNITS=60;
+function sanitizeDeploy(raw){
+  if(!Array.isArray(raw)) return null;
+  const out=[];
+  for(const d of raw.slice(0,MAX_FOE_UNITS)){
+    if(!d || typeof d!=='object' || !Object.prototype.hasOwnProperty.call(UNITS,d.id)) continue;
+    const num=(v,lo,hi,def)=> (typeof v==='number' && isFinite(v)) ? Math.max(lo,Math.min(hi,v)) : def;
+    const e={ id:d.id, lvl:Math.round(num(d.lvl,1,8,1)), x:num(d.x,0,G.W,G.W/2), y:num(d.y,G.H*0.5,G.H,G.H*0.75) };
+    if(d.dmgFrac!=null){ const f=num(d.dmgFrac,0.02,1,1); if(f<1) e.dmgFrac=f; }
+    out.push(e);
+  }
+  return out;
+}
+function sanitizeTech(raw){
+  const out={};
+  if(raw && typeof raw==='object') for(const k in UNITS) if(Object.prototype.hasOwnProperty.call(raw,k) && raw[k]===true) out[k]=true;
+  return out;
+}
 function onFoeReady(m){
+  if(!m || typeof m!=='object') return;
   if(G.phase==='lobby'||G.phase==='over') return;
   if(!(m.round>=G.round)) return;                 // stale / duplicate from a previous round
   if(m.round>G.round||G.phase!=='plan'){          // rival is ahead of us, or we are mid-battle
@@ -438,9 +464,11 @@ function onFoeReady(m){
 }
 function applyFoeReady(m){
   if(G.foeReady) return;                          // already have this round's deploy
+  const deploy=sanitizeDeploy(m.deploy);
+  if(!deploy||!deploy.length){ toast('El rival envió un despliegue inválido'); return; }
   G.foeReady=true;
-  G.foeDeploy=m.deploy;
-  G.foeTech=m.tech||{};
+  G.foeDeploy=deploy;
+  G.foeTech=sanitizeTech(m.tech);
   $('phaseNote').textContent = G.myReady ? 'Resolviendo combate…' : 'Tu rival ya está listo. Esperándote.';
   tryResolve();
 }
