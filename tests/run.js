@@ -741,6 +741,51 @@ pending.push((async () => {
   check('versión: rechaza clientes con otra versión antes de empezar (sala privada y búsqueda) y no bloquea a los compatibles', fail.length === 0, fail.join('; '));
 }
 
+// (u) respawn estilo Mechabellum: las unidades destruidas vuelven a pleno HP en la ronda siguiente; los supervivientes conservan el daño
+{
+  const { makePair, handshake } = require('./net');
+  const fail = [];
+  const mk = (ids, y) => ids.map((id, i) => ({ id, lvl: 1, x: 150 + i * 120, y: y + (i % 3) * 15 }));
+
+  // A. la simulación informa 'rev': destruidas = HP máximo, supervivientes = su HP; nunca peor que estar destruido
+  { const p = makePair(); const m = p.host;
+    for (let k = 0; k < 20; k++) {
+      const H = mk(['crawler', 'warden', 'longbow', 'vulcan', 'marauder', 'titan'].slice(0, 2 + k % 5), 390), Gd = mk(['titan', 'crawler', 'vulcan', 'warden'].slice(0, 2 + k % 3), 390);
+      const r = m.simulate(H, Gd, {}, {}, 300 + k);
+      for (const surv of [r.hostSurv, r.guestSurv]) for (const [di, s] of Object.entries(surv)) {
+        if (!(s.rev >= s.hp - 1e-6 && s.rev <= s.max + 1e-6)) fail.push(`A${k}: rev fuera de rango (${s.rev} / ${s.hp}..${s.max})`);
+        if (s.hp <= 0 && Math.abs(s.rev - s.max) > 1e-6) fail.push(`A${k}: una unidad destruida no reaparece a pleno HP`);
+      }
+    } }
+
+  // B. partida real: tras una ronda con bajas el ejército NO se achica y se puede confirmar sin comprar nada
+  { const p = makePair({ raf: true }); handshake(p);
+    const H = p.host, Gu = p.guest;
+    const run = (ms) => { for (let t = 0; t < ms; t += 250) { p.clock.advance(250); p.pump(); } };
+    H.G.battleSpeed = 4; Gu.G.battleSpeed = 4;
+    H.G.myDeploy.push(...mk(['crawler', 'crawler', 'marauder', 'warden'], 400));
+    Gu.G.myDeploy.push(...mk(['titan', 'vulcan', 'longbow'], 380));
+    const n0 = [H.G.myDeploy.length, Gu.G.myDeploy.length];
+    H.confirmReady(); p.pump(); Gu.confirmReady(); p.pump();
+    let g = 0; while (H.G.phase !== 'plan' && H.G.phase !== 'over' && g++ < 400) run(500);
+    run(2000);
+    if (H.G.round !== 2 || Gu.G.round !== 2) fail.push('B: no pasó a la ronda 2');
+    if (H.G.myDeploy.length !== n0[0] || Gu.G.myDeploy.length !== n0[1]) fail.push(`B: el ejército se achicó (${n0} -> ${H.G.myDeploy.length},${Gu.G.myDeploy.length}): las destruidas no reaparecieron`);
+    const log0 = p.log.host[0];
+    if (log0.winner === 'draw') fail.push('B: la ronda 1 debía tener un ganador');
+    // los 'dmgFrac' son válidos: entre 0.02 y 1, y el que ganó solo tiene daño arrastrado, no unidades perdidas
+    for (const m of [H, Gu]) for (const d of m.G.myDeploy) if (d.dmgFrac !== undefined && !(d.dmgFrac >= 0.02 && d.dmgFrac < 1)) fail.push('B: dmgFrac inválido ' + d.dmgFrac);
+    // ronda 2 sin comprar nada: se puede confirmar y ambas máquinas simulan lo mismo
+    H.confirmReady(); p.pump(); Gu.confirmReady(); p.pump();
+    if (H.G.phase !== 'battle' || Gu.G.phase !== 'battle') fail.push('B: no se pudo jugar la ronda 2 con las unidades que reaparecieron');
+    g = 0; while (H.G.phase === 'battle' && g++ < 400) run(500);
+    if (p.log.host.length !== 2 || JSON.stringify(p.log.host) !== JSON.stringify(p.log.guest)) fail.push('B: las simulaciones de la ronda 2 difieren entre máquinas');
+    // lo grabado en el replay coincide en ambos lados (incluye los dmgFrac arrastrados)
+    if (JSON.stringify(H.Rec.cur.rounds) !== JSON.stringify(Gu.Rec.cur.rounds)) fail.push('B: el replay grabó entradas distintas en host y guest'); }
+
+  check('respawn: destruidas reaparecen a pleno HP, supervivientes conservan daño, ejército intacto y misma simulación', fail.length === 0, fail.slice(0, 4).join('; '));
+}
+
 // --report: tabla de winrates entre todos los tipos y unidades
 if (process.argv.includes('--report')) {
   console.log('\nTriángulo por presupuesto (% victorias del que debería ganar):');

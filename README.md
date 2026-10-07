@@ -11,7 +11,10 @@ Partida al mejor de 5 (gana quien llega a 3 rondas). Cada ronda:
 1. **Planificás** (90 s la primera, 60 s las siguientes): desplegás mechas con créditos, los **movés**, los **fusionás**
    (dos iguales del mismo nivel → +1 nivel) o investigás **tecnologías** por unidad.
 2. Confirmás **LISTO**. Cuando los dos confirman, el combate se simula y se reproduce (velocidad 0,5×–4×).
-3. Los supervivientes vuelven con el HP que les quedó y ves el despliegue y las techs del rival de la ronda anterior (intel).
+3. **Todas tus unidades reaparecen** en la ronda siguiente, en su posición: las destruidas vuelven a pleno HP y las que sobrevivieron
+   conservan el daño que recibieron (constante `PERSIST_DAMAGE`; con `false` todas vuelven a pleno HP). Un escuadrón (p. ej. Crawlers)
+   vuelve entero con el promedio de sus miembros, contando a los destruidos como sanos. Ves además el despliegue y las techs del rival
+   de la ronda anterior (intel).
 
 Triángulo de contras: **enjambre > pesado > rango > enjambre**; el asalto es generalista (`TYPE_ADV` en el código).
 
