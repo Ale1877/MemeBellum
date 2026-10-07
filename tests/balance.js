@@ -31,13 +31,13 @@ function createBench(mod) {
     }
     return w / n;
   }
-  const typeDuel = (a, b, budget, n = 40) => winrate(r => buildArmy(r, idsOfType(a), budget), r => buildArmy(r, idsOfType(b), budget), n);
-  const unitDuel = (a, b, budget, n = 40) => winrate(r => buildArmy(r, [a], budget), r => buildArmy(r, [b], budget), n);
+  const typeDuel = (a, b, budget, n = 40, seed = 1) => winrate(r => buildArmy(r, idsOfType(a), budget), r => buildArmy(r, idsOfType(b), budget), n, seed);
+  const unitDuel = (a, b, budget, n = 40, seed = 1) => winrate(r => buildArmy(r, [a], budget), r => buildArmy(r, [b], budget), n, seed);
   // fusión: 1 unidad de nivel L contra (m) unidades de nivel L-1 con el mismo costo total
-  function fusionDuel(id, n = 40) {
+  function fusionDuel(id, n = 40, seed = 0) {
     const pos = r => ({ x: 200 + r() * 600, y: 260 + r() * 150 });
-    const L2 = winrate(r => [{ id, lvl: 2, ...pos(r) }], r => [{ id, lvl: 1, ...pos(r) }, { id, lvl: 1, ...pos(r) }], n, 7);
-    const L3 = winrate(r => [{ id, lvl: 3, ...pos(r) }], r => [{ id, lvl: 1, ...pos(r) }, { id, lvl: 1, ...pos(r) }, { id, lvl: 1, ...pos(r) }, { id, lvl: 1, ...pos(r) }], n, 8);
+    const L2 = winrate(r => [{ id, lvl: 2, ...pos(r) }], r => [{ id, lvl: 1, ...pos(r) }, { id, lvl: 1, ...pos(r) }], n, 7 + seed);
+    const L3 = winrate(r => [{ id, lvl: 3, ...pos(r) }], r => [{ id, lvl: 1, ...pos(r) }, { id, lvl: 1, ...pos(r) }, { id, lvl: 1, ...pos(r) }, { id, lvl: 1, ...pos(r) }], n, 8 + seed);
     return { L2, L3 };
   }
   const TRI = [['swarm', 'heavy'], ['heavy', 'ranged'], ['ranged', 'swarm']];
