@@ -195,9 +195,28 @@
     .log{height:110px}
     .modebar .mode{min-width:0;letter-spacing:1px;padding:9px 4px;font-size:11px}
     .modebar{display:grid;grid-template-columns:1fr 1fr}
+    .bar{display:grid;grid-template-columns:1fr 1fr}
+    .bar button{min-width:0;letter-spacing:1px;font-size:12px}
+    .bar #btnUndo,.bar #btnLobby{grid-column:1/-1}
     .code-big{font-size:26px;letter-spacing:6px}
   }
 
+
+  /* ---------- Battle summary ---------- */
+  .summary{margin-top:14px;animation:fadeIn .35s ease-out}
+  .summary h3{font-family:var(--disp);font-size:12px;letter-spacing:2px;margin:0 0 8px}
+  .sum-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .sum-col h4{font-family:var(--disp);font-size:11px;letter-spacing:1.5px;margin-bottom:6px}
+  .sum-col.me h4{color:var(--phos)} .sum-col.foe h4{color:var(--red)}
+  .sum-row{display:grid;grid-template-columns:22px 1fr auto auto;gap:4px 8px;align-items:center;font-size:12px;padding:4px 0;border-bottom:1px solid var(--line)}
+  .sum-row .nm{color:var(--ink)} .sum-row .n{color:var(--ink-dim)} .sum-row .d{color:var(--amber);text-align:right;min-width:46px}
+  .sum-row .bar{grid-column:2/5;height:3px;background:var(--line);margin-top:-1px}
+  .sum-row .bar i{display:block;height:100%;transform-origin:left;animation:grow .6s ease-out both}
+  .sum-col.me .bar i{background:var(--phos)} .sum-col.foe .bar i{background:var(--red)}
+  @keyframes grow{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+  .sum-tot{display:flex;justify-content:space-between;font-size:11px;color:var(--ink-dim);margin-top:6px}
+  .mvp{margin-top:10px;font-size:12px;color:var(--amber)}
+  @media (max-width:600px){ .sum-grid{grid-template-columns:1fr} }
   /* ---------- Motion (transform/opacity only: composited, no layout) ---------- */
   .screen.active{animation:fadeIn .3s ease-out}
   @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
@@ -307,8 +326,10 @@
   <div class="bar">
     <button class="ghost" id="btnUndo">DESHACER ÚLTIMA</button>
     <button class="ghost" id="btnFx">EFECTOS: ALTO</button>
+    <button class="ghost" id="btnSnd">SONIDO: ON</button>
     <button class="danger" id="btnLobby" style="display:none">VOLVER AL LOBBY</button>
   </div>
+  <div class="card summary" id="summary" hidden></div>
   <div class="phase-note" id="phaseNote"></div>
 
   <div class="log" id="log"></div>
@@ -583,6 +604,7 @@ function leaveToLobby(){
     foeTech:{}, foeLastDeploy:null, foeLastTech:{}, pendingReady:null, myDeploy:[], myPending:[], myTech:{},
     code:'', token:'', sentReady:null, foeAway:false });
   $('log').innerHTML='';
+  hideSummary();
   $('createBox').style.display='none';
   $('btnCreate').disabled=false; $('btnJoin').disabled=false;
   $('joinStatus').textContent='';
@@ -688,6 +710,7 @@ function startMatch(){
   $('tagMe').textContent=G.name.toUpperCase();
   $('tagFoe').textContent=G.foeName.toUpperCase();
   show('scrGame');
+  hideSummary();
   fitCanvas();
   $('btnLobby').style.display='none';
   startHeartbeat();
@@ -727,6 +750,7 @@ function updateHUD(){
   $('btnReady').classList.toggle('pulse', G.phase==='plan' && !G.myReady && G.myDeploy.length>0);   // nudge: you can confirm now
 }
 function showBanner(text,cls,sub){
+  if(cls==='info'&&/^RONDA/.test(text)) sfx('round'); else if(text==='VICTORIA') sfx('win'); else if(text==='DERROTA') sfx('lose');
   const b=$('banner'); if(!b) return;
   b.className='banner '+(cls||''); b.textContent=text;
   if(sub){ const s=document.createElement('small'); s.textContent=sub; b.appendChild(s); }
@@ -857,7 +881,7 @@ function onFieldTap(p){
   G.myPending.push({kind:'place',entry,cost:u.cost});
   if(G.gold<u.cost){ G.selected=null; updateSelHint(); }
   updateHUD(); renderShop(); drawField(null);
-  fxPlace(entry.x*V.sx,entry.y*V.sy,0);
+  fxPlace(entry.x*V.sx,entry.y*V.sy,0); sfx('place');
 }
 
 // MOVER: tap one of your units, then tap where it should go. Free (no credits), undoable.
@@ -875,7 +899,7 @@ function handleMove(p){
   const nx=Math.max(mx,Math.min(G.W-mx,p.x)), ny=Math.max(G.H*0.54,Math.min(G.H-my,p.y));
   G.myPending.push({kind:'move',entry:d,x:d.x,y:d.y});
   d.x=nx; d.y=ny;
-  moveSel=null; updateSelHint(); drawField(null); fxPlace(nx*V.sx,ny*V.sy,0);
+  moveSel=null; updateSelHint(); drawField(null); fxPlace(nx*V.sx,ny*V.sy,0); sfx('place');
 }
 
 // hit radius is measured in CSS pixels (finger-sized), whatever the canvas scale
@@ -905,7 +929,7 @@ function handleMerge(p){
   a.lvl+=1;
   delete a.dmgFrac; // fusing repairs to full
   G.myPending.push({kind:'merge',restore:removed,leveled:a,prevFrac});
-  toast(`${UNITS[a.id].name} subió a nivel ${a.lvl}`); fxPlace(a.x*V.sx,a.y*V.sy,2);
+  toast(`${UNITS[a.id].name} subió a nivel ${a.lvl}`); fxPlace(a.x*V.sx,a.y*V.sy,2); sfx('merge');
   mergeFirst=null; updateSelHint(); updateHUD(); renderShop(); drawField(null);
 }
 
@@ -1232,6 +1256,7 @@ function endBattle(){ if(G._bt) G._bt.active=false; }
 // called once per SIM frame (from the playback timer): detects events and spawns effects
 function advanceBattle(B,f){
   B.prev=B.cur; B.cur=f; B.tickAt=nowMs(); B.interval=PB_BASE/G.battleSpeed;
+  battleAudio(B,f);
   const q=FXQ[fxLevel]; if(!q.parts) return;
   const PE=B.prev.ents, CE=f.ents;
   for(let i=0;i<B.n;i++){
@@ -1243,6 +1268,19 @@ function advanceBattle(B,f){
   }
   const shots=f.shots, stride=Math.max(1,Math.ceil(shots.length/q.shots));
   for(let k=0;k<shots.length;k+=stride){ const s=shots[k]; s.sideMine=s.side===B.mySide; fxShot(s,B.flip); }
+}
+// sound for one sim frame: at most 2 gunshots (the heaviest weapons win) and 2 explosions, fewer at high speed
+function battleAudio(B,f){
+  if(!AUD.on||!AUD.ctx) return;
+  const fast=G.battleSpeed>2;
+  let b1=null,b2=null;
+  for(const s of f.shots){ const w=SHOT_PRIO[s.id]||0; if(!b1||w>(SHOT_PRIO[b1.id]||0)){ b2=b1; b1=s; } else if(!b2||w>(SHOT_PRIO[b2.id]||0)) b2=s; }
+  if(b1 && (!fast||(SHOT_PRIO[b1.id]||0)>=5)) sfx('shot_'+b1.id);
+  if(b2 && !fast) sfx('shot_'+b2.id);
+  let booms=0;
+  for(let i=0;i<B.n&&booms<2;i++){
+    if(B.prev.ents[i].hp>0 && f.ents[i].hp<=0){ booms++; const t=f.ents[i].def.type; sfx(f.ents[i].def.id==='titan'?'boom_big':t==='heavy'?'boom':t==='swarm'?'boom_small':'boom'); }
+  }
 }
 let rafId=0, lastRaf=0, wdN=0, wdSum=0;
 function startRender(){ if(HAS_RAF && !rafId){ lastRaf=nowMs(); rafId=requestAnimationFrame(renderLoop); } }
@@ -1309,11 +1347,75 @@ function watchdog(gapMs){
 }
 function redraw(){ if(G._bt) drawBattle(G._bt,nowMs(),0,0); else drawField(G._view||null); }
 
+/* ---------- Audio (Web Audio, fully synthesized: no assets, no downloads) ----------
+   Cheap by construction: one shared noise buffer, short one-shot voices that disconnect themselves,
+   a hard voice cap, a per-sound rate limit, and the context is suspended while the tab is hidden.
+   The AudioContext can only start after a user gesture (browser autoplay policy). */
+const AUD={ctx:null,master:null,noise:null,on:true,voices:0,last:{},MAXV:12};
+try{ AUD.on = localStorage.getItem('ironsiege.snd')!=='off'; }catch(_){}
+function audioInit(){
+  if(AUD.ctx){ if(AUD.ctx.state==='suspended') try{ AUD.ctx.resume(); }catch(_){} return; }
+  const AC = typeof AudioContext!=='undefined' ? AudioContext : typeof webkitAudioContext!=='undefined' ? webkitAudioContext : null;
+  if(!AC) return;
+  try{
+    const c=new AC(); AUD.ctx=c;
+    AUD.master=c.createGain(); AUD.master.gain.value=.32; AUD.master.connect(c.destination);
+    const len=Math.floor(c.sampleRate*.45), buf=c.createBuffer(1,len,c.sampleRate), d=buf.getChannelData(0);
+    for(let i=0;i<len;i++) d[i]=Math.random()*2-1;                       // 0.45s of white noise shared by every noise voice
+    AUD.noise=buf;
+  }catch(_){ AUD.ctx=null; }
+}
+function voiceEnd(node){ node.onended=()=>{ AUD.voices--; try{ node.disconnect(); }catch(_){} }; AUD.voices++; }
+// pitched blip with a frequency sweep and a fast attack/exponential decay
+function aTone(type,f0,f1,dur,vol,delay){
+  const c=AUD.ctx, t=c.currentTime+(delay||0), o=c.createOscillator(), g=c.createGain();
+  o.type=type; o.frequency.setValueAtTime(f0,t); if(f1!==f0) o.frequency.exponentialRampToValueAtTime(Math.max(1,f1),t+dur);
+  g.gain.setValueAtTime(0.0001,t); g.gain.linearRampToValueAtTime(vol,t+.005); g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+  o.connect(g); g.connect(AUD.master); voiceEnd(o); o.start(t); o.stop(t+dur+.02);
+}
+// filtered noise burst (gunfire, impacts, explosions)
+function aNoise(dur,vol,ftype,f0,f1,delay){
+  const c=AUD.ctx, t=c.currentTime+(delay||0), n=c.createBufferSource(), f=c.createBiquadFilter(), g=c.createGain();
+  n.buffer=AUD.noise; f.type=ftype; f.frequency.setValueAtTime(f0,t); if(f1!==f0) f.frequency.exponentialRampToValueAtTime(Math.max(20,f1),t+dur);
+  g.gain.setValueAtTime(vol,t); g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+  n.connect(f); f.connect(g); g.connect(AUD.master); voiceEnd(n); n.start(t); n.stop(t+dur+.02);
+}
+const SFX={ // gap = minimum seconds between two plays of the same sound; prio = may exceed the voice cap
+  click:   {gap:.03, play:()=>aTone('square',900,600,.04,.08)},
+  place:   {gap:.05, play:()=>{ aTone('sine',320,640,.09,.16); aNoise(.03,.05,'highpass',3000,3000); }},
+  merge:   {gap:.1,  play:()=>{ aTone('triangle',440,440,.1,.14); aTone('triangle',554,554,.1,.14,.08); aTone('triangle',659,659,.16,.14,.16); }},
+  round:   {gap:.3,  prio:1, play:()=>{ aTone('square',330,330,.09,.1); aTone('square',495,495,.14,.1,.1); }},
+  win:     {gap:1,   prio:1, play:()=>{ [523,659,784,1047].forEach((f,i)=>aTone('triangle',f,f,.22,.16,i*.11)); }},
+  lose:    {gap:1,   prio:1, play:()=>{ [392,330,262,196].forEach((f,i)=>aTone('sawtooth',f,f*.97,.26,.1,i*.14)); }},
+  shot_crawler:{gap:.07, play:()=>aNoise(.03,.05,'highpass',3500,3500)},
+  shot_marauder:{gap:.06,play:()=>{ aNoise(.06,.07,'bandpass',1800,1800); aTone('square',240,120,.05,.05); }},
+  shot_warden: {gap:.07, play:()=>aTone('sawtooth',150,60,.1,.1)},
+  shot_longbow:{gap:.08, play:()=>{ aNoise(.12,.09,'bandpass',2600,900); aTone('sine',1300,300,.12,.07); }},
+  shot_vulcan: {gap:.06, play:()=>aNoise(.1,.1,'lowpass',1600,400)},
+  shot_titan:  {gap:.12, play:()=>{ aNoise(.22,.2,'lowpass',900,150); aTone('sine',95,38,.26,.22); }},
+  boom_small:  {gap:.04, prio:1, play:()=>aNoise(.18,.1,'lowpass',2400,300)},
+  boom:        {gap:.05, prio:1, play:()=>{ aNoise(.35,.2,'lowpass',1500,120); aTone('sine',130,40,.32,.2); }},
+  boom_big:    {gap:.08, prio:1, play:()=>{ aNoise(.7,.32,'lowpass',1100,70); aTone('sine',90,28,.6,.34); }},
+};
+function sfx(name){
+  if(!AUD.on||!AUD.ctx||AUD.ctx.state!=='running') return;
+  const d=SFX[name]; if(!d) return;
+  const t=AUD.ctx.currentTime; if(t-(AUD.last[name]===undefined?-9:AUD.last[name])<d.gap) return;   // rate limit per sound
+  if(AUD.voices>=AUD.MAXV && !d.prio) return;                                                       // hard voice cap
+  AUD.last[name]=t;
+  try{ d.play(); }catch(_){}
+}
+const SHOT_PRIO={titan:6,longbow:5,vulcan:4,warden:3,marauder:2,crawler:1};
+function setSnd(on,persist){
+  AUD.on=on; const b=$('btnSnd'); if(b) b.textContent='SONIDO: '+(on?'ON':'OFF');
+  if(persist){ try{ localStorage.setItem('ironsiege.snd',on?'on':'off'); }catch(_){} }
+}
+
 /* ---------- Ready / resolve ---------- */
 function confirmReady(){
   if(G.phase!=='plan'||G.myReady) return;
   if(!G.myDeploy.length){ toast('Desplegá al menos una unidad'); return; }
-  G.myReady=true;
+  G.myReady=true; hideSummary();
   $('btnReady').disabled=true; $('btnUndo').disabled=true; $('btnReady').classList.remove('pulse');
   G.selected=null; renderShop();
   G.sentReady={t:'ready', round:G.round, deploy:G.myDeploy, tech:G.myTech};
@@ -1368,7 +1470,7 @@ function expand(deploy, side, tech){
       ents.push({
         def:u, side, id:u.id, type:u.type, lvl, di,
         x:d.x+off, y:side==='host'? d.y : (G.H-d.y),
-        hp:startHp, maxhp:hp, dmg, rng, spd, splash, siege, cdMul,
+        hp:startHp, maxhp:hp, dmg, rng, spd, splash, siege, cdMul, dealt:0, kills:0,   // dealt/kills: statistics only, never read by the sim
         cd:0,
       });
     }
@@ -1404,11 +1506,13 @@ function simulate(hostDeploy, guestDeploy, hostTech, guestTech, seed){
           const adv = e.siege ? 1 : ((TYPE_ADV[e.type]&&TYPE_ADV[e.type][best.type])||1);
           const variance=0.9+rng()*0.2;
           let dealt=e.dmg*adv*variance;
-          best.hp-=dealt;
+          const bh=best.hp; best.hp-=dealt;
+          e.dealt+=Math.min(dealt,bh); if(bh>0&&best.hp<=0) e.kills++;     // stats: effective damage (no overkill) and kills
           if(e.splash>0){
             const rr=e.splash*e.splash;
             for(const o of ents){ if(o.hp>0&&o.side!==e.side&&o!==best){
-              const dx=o.x-best.x,dy=o.y-best.y; if(dx*dx+dy*dy<rr) o.hp-=dealt*0.6;
+              const dx=o.x-best.x,dy=o.y-best.y;
+              if(dx*dx+dy*dy<rr){ const oh=o.hp; o.hp-=dealt*0.6; e.dealt+=Math.min(dealt*0.6,oh); if(o.hp<=0) e.kills++; }
             }}
           }
           e.cd = Math.max(2, Math.round(e.def.cd*e.cdMul));
@@ -1438,7 +1542,8 @@ function simulate(hostDeploy, guestDeploy, hostTech, guestTech, seed){
     return map; // {di:{hp,max}}
   }
   return {frames, winner, hostHP:Math.round(hostHP), guestHP:Math.round(guestHP),
-          hostSurv:survival('host'), guestSurv:survival('guest')};
+          hostSurv:survival('host'), guestSurv:survival('guest'),
+          stats:ents.map(e=>({id:e.id,side:e.side,di:e.di,dealt:Math.round(e.dealt),kills:e.kills,alive:e.hp>0}))};
 }
 
 /* ---------- Playback animation ---------- */
@@ -1488,6 +1593,7 @@ function finishRound(result, myColorSide){
   const myHP = myColorSide==='host'?result.hostHP:result.guestHP;
   const foeHP= myColorSide==='host'?result.guestHP:result.hostHP;
 
+  if(result.stats){ try{ renderSummary(buildSummary(result.stats,myColorSide),G.round); }catch(_){} }
   showBanner(iWon===true?'VICTORIA':iWon===false?'DERROTA':'EMPATE', iWon===true?'':iWon===false?'lose':'draw', `${myHP} vs ${foeHP} HP restante`);
   if(iWon===true){ G.winsMe++; logLine(`Ronda ${G.round}: <b class="p1">${esc(G.name)}</b> gana. HP restante ${myHP} vs ${foeHP}.`,'win'); }
   else if(iWon===false){ G.winsFoe++; logLine(`Ronda ${G.round}: <b class="p2">${esc(G.foeName)}</b> gana. HP restante ${foeHP} vs ${myHP}.`,'win'); }
@@ -1495,6 +1601,7 @@ function finishRound(result, myColorSide){
 
   updateHUD();
   G.phase='between';
+  $('phaseNote').textContent='Combate terminado · preparando la siguiente ronda…';
 
   // match end?
   if(G.winsMe>=3||G.winsFoe>=3){
@@ -1533,6 +1640,50 @@ function finishRound(result, myColorSide){
   toast(iWon===true?'Ronda ganada':iWon===false?'Ronda perdida':'Empate');
   G._nrTimer=setTimeout(()=>{ if(G.phase!=='between') return; newRound(false); showBanner('RONDA '+G.round,'info',`+${G.income}◈ de ingreso`); $('phaseNote').textContent=`Ronda ${G.round}. +${G.income}◈ de ingreso. Supervivientes dañados en campo.`; }, 1400);
 }
+
+/* ---------- Battle summary (from the deterministic sim's statistics) ---------- */
+// Aggregates per-entity stats into rows per unit type for each side; pure function (testable).
+function buildSummary(stats, mySide){
+  const agg={me:{},foe:{}}; let mvp=null;
+  for(const e of stats){
+    const side=e.side===mySide?'me':'foe', row=agg[side][e.id]||(agg[side][e.id]={id:e.id,n:0,alive:0,dealt:0,kills:0});
+    row.n++; if(e.alive) row.alive++; row.dealt+=e.dealt; row.kills+=e.kills;
+  }
+  const out={me:[],foe:[],max:1};
+  for(const side of ['me','foe']){
+    out[side]=Object.values(agg[side]).sort((a,b)=>b.dealt-a.dealt);
+    for(const r of out[side]){ out.max=Math.max(out.max,r.dealt); if(!mvp||r.dealt>mvp.dealt) mvp={id:r.id,side,dealt:r.dealt,kills:r.kills}; }
+  }
+  out.mvp=mvp&&mvp.dealt>0?mvp:null;
+  const tot=side=>out[side].reduce((t,r)=>({dealt:t.dealt+r.dealt,kills:t.kills+r.kills,alive:t.alive+r.alive,n:t.n+r.n}),{dealt:0,kills:0,alive:0,n:0});
+  out.totMe=tot('me'); out.totFoe=tot('foe');
+  return out;
+}
+function renderSummary(sum, round){
+  const box=$('summary'); if(!box) return;
+  box.textContent='';
+  const el=(tag,cls,txt)=>{ const e=document.createElement(tag); if(cls) e.className=cls; if(txt!=null) e.textContent=txt; return e; };
+  box.appendChild(el('h3','','RESUMEN · RONDA '+round));
+  const grid=el('div','sum-grid');
+  for(const side of ['me','foe']){
+    const col=el('div','sum-col '+side), tot=side==='me'?sum.totMe:sum.totFoe;
+    col.appendChild(el('h4','',(side==='me'?G.name:G.foeName).toUpperCase()));
+    for(const r of sum[side]){
+      const u=UNITS[r.id], row=el('div','sum-row');
+      row.appendChild(el('span','ic',u.ic)); row.appendChild(el('span','nm',u.name));
+      row.appendChild(el('span','n',r.alive+'/'+r.n));
+      row.appendChild(el('span','d',r.dealt+(r.kills?' ☠'+r.kills:'')));
+      const bar=el('div','bar'), fill=el('i'); fill.style.width=Math.round(r.dealt/sum.max*100)+'%'; bar.appendChild(fill); row.appendChild(bar);
+      col.appendChild(row);
+    }
+    const t=el('div','sum-tot'); t.appendChild(el('span','','en pie '+tot.alive+'/'+tot.n)); t.appendChild(el('span','','daño '+tot.dealt+' · bajas '+tot.kills)); col.appendChild(t);
+    grid.appendChild(col);
+  }
+  box.appendChild(grid);
+  if(sum.mvp){ const u=UNITS[sum.mvp.id]; box.appendChild(el('div','mvp',`★ MVP: ${u.ic} ${u.name} (${sum.mvp.side==='me'?G.name:G.foeName}) · ${sum.mvp.dealt} daño · ${sum.mvp.kills} bajas`)); }
+  box.hidden=false;
+}
+function hideSummary(){ const b=$('summary'); if(b) b.hidden=true; }
 
 /* ---------- Unit info modal ---------- */
 const TYPE_LABEL={swarm:'ENJAMBRE',heavy:'PESADO',ranged:'RANGO',assault:'ASALTO'};
@@ -1604,6 +1755,10 @@ function esc(s){ return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;',
 $('btnCreate').onclick=hostCreate;
 $('btnJoin').onclick=joinRoom;
 $('btnLobby').onclick=leaveToLobby;
+$('btnSnd').onclick=()=>{ audioInit(); setSnd(!AUD.on,true); toast('Sonido: '+(AUD.on?'ON':'OFF')); sfx('click'); };
+setSnd(AUD.on,false);
+// first touch/click unlocks audio (autoplay policy); every button gets a click blip
+document.addEventListener('pointerdown',e=>{ audioInit(); if(e.target&&e.target.closest&&e.target.closest('button')&&e.target.id!=='btnSnd') sfx('click'); },{passive:true});
 $('btnFx').onclick=()=>{ const next=FX_ORDER[(FX_ORDER.indexOf(fxLevel)+1)%FX_ORDER.length]; setFx(next,true); toast('Efectos: '+FX_LABEL[next]); redraw(); };
 setFx(fxLevel,false);
 /* ---------- Mobile conveniences ---------- */
@@ -1638,7 +1793,8 @@ async function keepAwake(on){
 }
 document.addEventListener('visibilitychange',()=>{
   const inMatch = G.phase!=='lobby' && G.phase!=='over';
-  if(document.visibilityState!=='visible'){ if(inMatch) send({t:'away'}); return; }
+  if(document.visibilityState!=='visible'){ if(inMatch) send({t:'away'}); try{ if(AUD.ctx) AUD.ctx.suspend(); }catch(_){} return; }
+  try{ if(AUD.ctx && AUD.on) AUD.ctx.resume(); }catch(_){}
   if(inMatch){
     send({t:'back'});
     if(!G.reconnecting && G.conn && !G.conn.open) connectionLost('Se cortó la conexión');

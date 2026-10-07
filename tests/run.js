@@ -374,6 +374,64 @@ for (const budget of TRI_BUDGETS) for (const [a, b] of TRI) {
   check('renderizador: rAF, tope de partículas por calidad, sin alterar la simulación, limpieza', fail.length === 0, fail.join('; '));
 }
 
+// (l) resumen de batalla: el daño efectivo que hace un bando iguala la vida que pierde el otro (conservación)
+{
+  const { makePair } = require('./net');
+  const p = makePair(); const m = p.host, fail = [];
+  const mk = (ids, y) => ids.map((id, i) => ({ id, lvl: 1 + (i % 2), x: 120 + i * 130, y: y + (i % 3) * 20 }));
+  for (let k = 0; k < 12; k++) {
+    const H = mk(['crawler', 'warden', 'longbow', 'vulcan', 'marauder', 'titan'].slice(0, 3 + k % 4), 380);
+    const Gd = mk(['titan', 'crawler', 'vulcan', 'longbow', 'warden'].slice(0, 3 + (k + 1) % 3), 380);
+    const tech = k % 2 ? { warden: true, longbow: true } : {};
+    const r = m.simulate(H, Gd, tech, {}, 900 + k);
+    const startHP = (dep, side, t) => m.expand(dep, side, t).reduce((s, e) => s + e.hp, 0);
+    const survHP = (surv) => Object.values(surv).reduce((s, x) => s + x.hp, 0);
+    const dealt = side => r.stats.filter(e => e.side === side).reduce((s, e) => s + e.dealt, 0);
+    const lostHost = startHP(H, 'host', tech) - survHP(r.hostSurv), lostGuest = startHP(Gd, 'guest', {}) - survHP(r.guestSurv);
+    if (Math.abs(dealt('guest') - lostHost) > r.stats.length) fail.push(`duelo ${k}: daño del guest ${dealt('guest')} vs vida perdida del host ${Math.round(lostHost)}`);
+    if (Math.abs(dealt('host') - lostGuest) > r.stats.length) fail.push(`duelo ${k}: daño del host ${dealt('host')} vs vida perdida del guest ${Math.round(lostGuest)}`);
+    const kills = side => r.stats.filter(e => e.side === side).reduce((s, e) => s + e.kills, 0);
+    const dead = side => r.stats.filter(e => e.side !== side && !e.alive).length;
+    if (kills('host') !== dead('host') || kills('guest') !== dead('guest')) fail.push(`duelo ${k}: bajas ${kills('host')}/${kills('guest')} vs muertos ${dead('host')}/${dead('guest')}`);
+    const sum = m.buildSummary(r.stats, 'host');
+    if (sum.totMe.dealt !== dealt('host') || sum.totFoe.dealt !== dealt('guest')) fail.push(`duelo ${k}: buildSummary no suma igual`);
+    if (sum.mvp && !(sum.mvp.dealt >= Math.max(...sum.me.map(x => x.dealt), ...sum.foe.map(x => x.dealt)))) fail.push(`duelo ${k}: MVP incorrecto`);
+    try { m.renderSummary(sum, 1); } catch (e) { fail.push('renderSummary lanzó: ' + e.message); }
+  }
+  check('resumen: conservación de daño, bajas = muertos, MVP y render', fail.length === 0, fail.slice(0, 3).join('; '));
+}
+
+// (m) audio: sin contexto/silenciado no hace nada; tope de voces; límite por sonido; todas las voces terminan
+{
+  const { makePair, handshake } = require('./net');
+  const p = makePair({ raf: true, audio: true }); handshake(p);
+  const A = p.host.AUD, fail = [], cnt = p.audio.count;
+  const nodes = () => cnt.osc + cnt.src;
+  p.host.sfx('click'); if (nodes() !== 0) fail.push('sonó sin AudioContext (falta gesto del usuario)');
+  p.host.audioInit(); if (!A.ctx) fail.push('audioInit no creó el contexto');
+  p.clock.advance(100);
+  let n0 = nodes(); for (let i = 0; i < 1000; i++) p.host.sfx('shot_titan');
+  if (nodes() - n0 > 2) fail.push('límite por sonido: 1000 llamadas simultáneas crearon ' + (nodes() - n0) + ' voces');
+  p.clock.advance(500);
+  A.voices += A.MAXV; n0 = nodes(); p.host.sfx('click'); p.host.sfx('shot_vulcan');
+  if (nodes() !== n0) fail.push('con el tope de voces lleno igual sonaron sonidos comunes');
+  p.clock.advance(200); p.host.sfx('boom_big'); if (nodes() === n0) fail.push('las explosiones (prioritarias) deben sonar con el tope lleno');
+  A.voices -= A.MAXV; p.clock.advance(1000);
+  p.host.setSnd(false, false); n0 = nodes(); p.clock.advance(500); p.host.sfx('boom'); if (nodes() !== n0) fail.push('silenciado igual sonó');
+  p.host.setSnd(true, false);
+  A.ctx.state = 'suspended'; p.clock.advance(500); n0 = nodes(); p.host.sfx('boom'); if (nodes() !== n0) fail.push('suspendido igual sonó');
+  A.ctx.state = 'running';
+  // una ronda completa con audio activo: no lanza y todas las voces terminan
+  for (const m of [p.host, p.guest]) { m.audioInit(); m.G.battleSpeed = 2; m.G.myDeploy.push({ id: 'crawler', lvl: 1, x: 300, y: 400 }, { id: 'titan', lvl: 1, x: 500, y: 400 }, { id: 'longbow', lvl: 1, x: 650, y: 390 }); }
+  p.host.confirmReady(); p.pump(); p.guest.confirmReady(); p.pump();
+  n0 = nodes(); let g = 0;
+  while (p.host.G.phase !== 'plan' && p.host.G.phase !== 'over' && g++ < 20000) { p.clock.advance(16); p.pump(); }
+  if (nodes() - n0 < 10) fail.push('el combate casi no generó sonido (' + (nodes() - n0) + ' voces)');
+  p.clock.advance(3000);
+  if (A.voices !== 0) fail.push('quedaron voces sin terminar: ' + A.voices);
+  check('audio: gesto previo, límite por sonido, tope de voces, silencio y cierre de voces', fail.length === 0, fail.join('; '));
+}
+
 // --report: tabla de winrates entre todos los tipos y unidades
 if (process.argv.includes('--report')) {
   console.log('\nTriángulo por presupuesto (% victorias del que debería ganar):');
