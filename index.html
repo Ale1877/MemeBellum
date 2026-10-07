@@ -437,8 +437,8 @@ const UNITS = {
     tech:{ id:'shield', name:'Escudo', cost:170, desc:'+50% HP máximo' } },
   longbow:{ id:'longbow', name:'Longbow', ic:'🎯', cost:190, hp:210, dmg:97, rng:280, spd:0.9, cd:34, type:'ranged',  count:1, splash:34, role:'Francotirador. Castiga enjambres a distancia.',
     tech:{ id:'scope', name:'Mira láser', cost:150, desc:'+80 alcance y +25% daño' } },
-  vulcan:{  id:'vulcan',  name:'Vulcan',  ic:'🔥', cost:150, hp:299, dmg:45, rng:170, spd:1.1, cd:16, type:'ranged',  count:1, splash:75, role:'Daño en área. Derrite grupos.',
-    tech:{ id:'napalm', name:'Napalm', cost:130, desc:'radio de salpicadura +80%' } },
+  vulcan:{  id:'vulcan',  name:'Vulcan',  ic:'🔥', cost:175, hp:400, dmg:45, rng:170, spd:1.1, cd:16, type:'ranged',  count:1, splash:60, role:'Daño en área. Derrite grupos.',
+    tech:{ id:'napalm', name:'Napalm', cost:150, desc:'radio de salpicadura +80%' } },
   titan:{   id:'titan',   name:'Titan',   ic:'🏔', cost:380, hp:1900,dmg:120,rng:120, spd:0.9, cd:28, type:'heavy',   count:1, splash:40, role:'Coloso. Pozo de HP y pegada brutal.',
     tech:{ id:'siege', name:'Asedio', cost:200, desc:'+40% daño, ignora ventajas de tipo' } },
 };
@@ -1968,7 +1968,7 @@ function hideSummary(){ const b=$('summary'); if(b) b.hidden=true; }
    tech sets): a few KB, no video, no per-frame data. Viewing = re-simulating with the same inputs. Replays
    are recorded automatically on both machines, kept in localStorage, and shareable as a compressed link
    (in the URL #fragment, so it never reaches any server). Anything imported is sanitized like network input. */
-const SIM_VERSION=1;      // bump whenever simulate()/UNITS/TYPE_ADV/lvlMult change (tests/run.js enforces this)
+const SIM_VERSION=2;      // bump whenever simulate()/UNITS/TYPE_ADV/lvlMult change (tests/run.js enforces this)
 const REPLAY_KEY='ironsiege.replays', REPLAY_MAX=12, REPLAY_MAX_CODE=70000, REPLAY_MAX_BYTES=400000;
 const Rec={cur:null};
 const q1=v=>Math.round(v*10)/10;

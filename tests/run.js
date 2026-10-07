@@ -71,7 +71,7 @@ for (const budget of TRI_BUDGETS) for (const [a, b] of TRI) {
   check('balance: ninguna unidad fuera de 25–75% de winrate promedio', bad.length === 0, bad.length ? 'fuera de rango: ' + bad.join(', ') : info.join(', '));
   // (b3) fusión: una unidad nivel 2 no debe aplastar a dos de nivel 1 (mismo costo)
   const worst = ids.map(id => [id, B.fusionDuel(id, 30, 321).L2]).sort((x, y) => y[1] - x[1])[0];
-  check('balance: fusión L2 vs 2×L1 no domina (≤ 92%)', worst[1] <= 0.92, `peor caso ${worst[0]} ${(worst[1] * 100).toFixed(0)}%`);
+  check('balance: fusión L2 vs 2×L1 no domina (≤ 82%)', worst[1] <= 0.82, `peor caso ${worst[0]} ${(worst[1] * 100).toFixed(0)}%`);
 }
 
 // (c) determinismo: misma entrada -> mismo resultado exacto
@@ -575,6 +575,11 @@ pending.push((async () => {
     V.replayToggle(); if (!V.RP.playing) fail.push('replayToggle no reanudó');
     V.replayClose();
     if (V.G.phase !== 'lobby' || V.G.name !== 'YO' || V.G.foeName !== 'OTRO' || V.G.isHost !== false || V.G._bt) fail.push('replayClose no restauró el estado');
+    // un replay grabado con otras reglas avisa (en vez de mostrar otro resultado sin decirlo)
+    const oldRec = JSON.parse(JSON.stringify(rh)); oldRec.sim = V.SIM_VERSION - 1;
+    V.G.battleSpeed = 4; V.replayOpen(oldRec);
+    if (!/otra versión/.test(v.hl.ctx.document.getElementById('toast').textContent)) fail.push('no avisó que el replay es de otra versión de las reglas');
+    V.replayClose();
     // almacenamiento: tope de 12, y no se rompe si el almacenamiento falla
     for (let i = 0; i < 15; i++) V.replaySave({ ...JSON.parse(JSON.stringify(rh)), id: 'id' + i });
     if (V.replaysLoad().length !== V.REPLAY_MAX) fail.push('tope de replays: ' + V.replaysLoad().length);
