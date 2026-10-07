@@ -178,27 +178,28 @@ for (const budget of TRI_BUDGETS) for (const [a, b] of TRI) {
     if (JSON.stringify(p.log.host) !== JSON.stringify(p.log.guest)) fail.push('simulaciones distintas a lo largo de la partida');
     if (p.host.G.winsMe !== p.guest.G.winsFoe || p.host.G.winsFoe !== p.guest.G.winsMe) fail.push('marcadores distintos');
   }
-  // 2. silencio del rival: se detecta en ~15s y la partida se marca interrumpida
+  // 2. silencio del rival: se detecta en ~15s y arranca la reconexión (la partida NO se corta); sin éxito en ~2min se da por perdida
   {
     const p = makePair(); handshake(p);
     for (let t = 0; t < 12000; t += 500) { p.clock.advance(500); p.pump(); }
     if (p.log.lost.host) fail.push('falso positivo con tráfico normal');
     p.queue.length = 0;
     for (let t = 0; t < 20000; t += 500) { p.clock.advance(500); p.queue.length = 0; }   // el rival no llega a nosotros
-    if (p.log.lost.host !== 1 || p.host.G.phase !== 'over' || p.host.G.conn !== null) fail.push(`silencio no detectado (lost=${p.log.lost.host}, fase=${p.host.G.phase})`);
+    if (p.log.lost.host !== 1 || !p.host.G.reconnecting || p.host.G.phase !== 'plan' || p.host.G.conn !== null) fail.push(`silencio: esperaba reconexión (lost=${p.log.lost.host}, reconnecting=${p.host.G.reconnecting}, fase=${p.host.G.phase})`);
+    p.clock.advance(130000);
+    if (p.host.G.phase !== 'over' || p.host.G.reconnecting) fail.push('tras ~2min sin reconectar debía terminar: ' + p.host.G.phase);
   }
-  // 3. cierre de conexión a mitad de combate corta la reproducción
+  // 3. corte a mitad de combate: el combate local sigue (la sim es determinista); si no vuelve, la partida termina
   {
     const p = makePair(); handshake(p);
     addUnits(p.host, 400); addUnits(p.guest, 380);
     p.host.confirmReady(); p.pump(); p.guest.confirmReady(); p.pump();
     p.clock.advance(300);
     p.guest.connectionLost('Se cortó la conexión');
-    const simsBefore = p.log.guest.length;
-    p.clock.advance(60000);
-    if (p.guest.G.phase !== 'over') fail.push('fase tras corte: ' + p.guest.G.phase);
-    if (p.guest.G.round !== 1) fail.push('la partida siguió avanzando tras el corte');
-    if (p.log.guest.length !== simsBefore) fail.push('simuló tras el corte');
+    if (!p.guest.G.reconnecting || p.guest.G.phase !== 'battle') fail.push(`corte en combate: reconnecting=${p.guest.G.reconnecting}, fase=${p.guest.G.phase}`);
+    p.clock.advance(130000);
+    if (p.guest.G.phase !== 'over') fail.push('fase tras agotar la reconexión: ' + p.guest.G.phase);
+    if (p.log.guest.length !== 1) fail.push('simulaciones del guest: ' + p.log.guest.length);
   }
   // 4. volver al lobby limpia el estado y cancela timers pendientes
   {
@@ -274,6 +275,73 @@ for (const budget of TRI_BUDGETS) for (const [a, b] of TRI) {
   m.onFieldTap({ x: 600, y: 420 });
   if (u0.x !== 300) fail.push('se movió después de confirmar');
   check('mover: selecciona, mueve gratis, acota, deshace y se bloquea al confirmar', fail.length === 0, fail.join('; '));
+}
+
+// (j) reconexión a mitad de partida sobre una red PeerJS falsa (corte de conectividad, mensajes perdidos, intrusos)
+{
+  const { makeNetPair } = require('./net');
+  const fail = [];
+  const addUnits = (m, y) => m.G.myDeploy.push({ id: 'warden', lvl: 1, x: 300, y }, { id: 'marauder', lvl: 1, x: 600, y });
+  const step = (p, ms) => p.clock.advance(ms);
+
+  // A. un corte con los 'ready' en vuelo se recupera: ambos reenvían su último ready y simulan una sola vez, idéntico
+  {
+    const p = makeNetPair();
+    if (p.host.G.phase !== 'plan' || p.guest.G.phase !== 'plan') fail.push(`A: no arrancó la partida (${p.host.G.phase}/${p.guest.G.phase})`);
+    if (!p.host.G.token || p.host.G.token !== p.guest.G.token) fail.push('A: el token no se compartió');
+    addUnits(p.host, 400); addUnits(p.guest, 380);
+    p.host.confirmReady();                              // su ready queda en vuelo...
+    p.net.kill();                                       // ...y se pierde con el corte
+    step(p, 2);
+    if (!p.host.G.reconnecting || !p.guest.G.reconnecting) fail.push('A: no entraron en reconexión');
+    if (p.host.G.phase !== 'plan') fail.push('A: el corte alteró la fase del host');
+    p.guest.confirmReady();                             // sin conexión: no se envía, pero queda guardado
+    step(p, 7000);
+    if (p.host.G.reconnecting || p.guest.G.reconnecting) fail.push('A: no se reconectaron');
+    if (p.host.G.phase !== 'battle' || p.guest.G.phase !== 'battle') fail.push(`A: no entraron al combate tras reconectar (${p.host.G.phase}/${p.guest.G.phase})`);
+    if (p.log.host.length !== 1 || p.log.guest.length !== 1 || JSON.stringify(p.log.host) !== JSON.stringify(p.log.guest)) fail.push('A: simulaciones distintas o duplicadas');
+  }
+  // B. partida completa con cortes repetidos: mismas simulaciones, mismo marcador, sin darse por vencidos
+  {
+    const p = makeNetPair(); p.host.G.battleSpeed = 4; p.guest.G.battleSpeed = 4;
+    let kills = 0, g = 0, tick = 0;
+    while (!(p.host.G.phase === 'over' && p.guest.G.phase === 'over') && g++ < 60000) {
+      for (const m of [p.host, p.guest]) if (m.G.phase === 'plan' && !m.G.myReady && !m.G.reconnecting) { addUnits(m, 400); m.confirmReady(); }
+      step(p, 100); tick++;
+      if (tick % 25 === 0 && kills < 6) { p.net.kill(); kills++; }
+    }
+    const H = p.host.G, Gu = p.guest.G;
+    if (!(H.phase === 'over' && Gu.phase === 'over')) fail.push(`B: la partida no terminó (${H.phase}/${Gu.phase})`);
+    if (kills < 2) fail.push('B: el test no llegó a cortar la red');
+    if (H.winsMe !== Gu.winsFoe || H.winsFoe !== Gu.winsMe || (H.winsMe < 3 && H.winsFoe < 3)) fail.push(`B: marcadores ${H.winsMe}-${H.winsFoe} vs ${Gu.winsMe}-${Gu.winsFoe}`);
+    if (JSON.stringify(p.log.host) !== JSON.stringify(p.log.guest)) fail.push('B: simulaciones distintas entre host y guest');
+    if (/No se pudo reconectar/.test(p.el(p.hl, 'phaseNote').textContent + p.el(p.gl, 'phaseNote').textContent)) fail.push('B: se rindió al reconectar');
+  }
+  // C. un intruso (sin token o con token falso) no puede secuestrar la partida; el rival legítimo sigue conectado
+  {
+    const p = makeNetPair(); const hostConn = p.host.G.conn;
+    for (const md of [undefined, { token: 'falso' }, { token: '' }]) {
+      const evil = new p.net.Peer(); step(p, 5);
+      const c = evil.connect('ironsiege-v1-' + p.code, { metadata: md }); step(p, 30);
+      if (c.open) fail.push('C: el intruso quedó conectado con ' + JSON.stringify(md));
+    }
+    if (p.host.G.conn !== hostConn || !hostConn.open) fail.push('C: el intruso desplazó al rival legítimo');
+  }
+  // D. se cae la señalización del host y también el enlace: el host se reengancha y el guest vuelve
+  {
+    const p = makeNetPair();
+    p.net.signalingDown(p.host.G.peer); p.net.kill(); step(p, 7000);
+    if (p.host.G.reconnecting || p.guest.G.reconnecting) fail.push('D: no se recuperó tras caer la señalización');
+  }
+  // E. un rival que avisó "estoy en segundo plano" tiene un plazo largo antes de darlo por perdido
+  {
+    const p = makeNetPair(); p.host.onData({ t: 'away' });
+    p.net.dropping = true; p.net.blockConnect = true; p.net.silentClose = true; step(p, 60000);   // el guest desaparece sin cerrar nada
+    if (p.host.G.reconnecting) fail.push('E: dio por perdido a un rival ausente demasiado pronto');
+    step(p, 70000);
+    if (!p.host.G.reconnecting && p.host.G.phase !== 'over') fail.push('E: nunca detectó la pérdida del rival ausente');
+  }
+  check('reconexión: corte con ready perdido, partida con cortes, intrusos, señalización, rival ausente', fail.length === 0, fail.join('; '));
 }
 
 // --report: tabla de winrates entre todos los tipos y unidades

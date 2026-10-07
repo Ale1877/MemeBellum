@@ -59,4 +59,22 @@ function handshake(p) {
   p.pump();
 }
 
-module.exports = { makePair, handshake };
+// Dos máquinas que usan hostCreate()/joinRoom() reales sobre la red PeerJS falsa.
+const NET_NAMES = NAMES.concat(['hostCreate','joinRoom','beginReconnect','giveUpReconnect']);
+function makeNetPair() {
+  const { makeNet } = require('./fakepeer');
+  const clock = makeClock(); const net = makeNet(clock);
+  const sb = { setTimeout: clock.setTimeout, clearTimeout: clock.clearTimeout, setInterval: clock.setInterval, clearInterval: clock.clearInterval, Peer: net.Peer, navigator: {} };
+  const hl = loadGame(NET_NAMES, { ...sb }), gl = loadGame(NET_NAMES, { ...sb });
+  const el = (l, id) => l.ctx.document.getElementById(id);
+  const log = { host: [], guest: [] };
+  for (const [who, l] of [['host', hl], ['guest', gl]]) {
+    const real = l.ctx.simulate;
+    l.ctx.simulate = (...a) => { const r = real(...a); log[who].push({ winner: r.winner, hostHP: r.hostHP, guestHP: r.guestHP }); return r; };
+  }
+  el(hl, 'playerName').value = 'H'; hl.api.hostCreate(); clock.advance(10);
+  const code = el(hl, 'roomCode').textContent;
+  el(gl, 'playerName').value = 'G'; el(gl, 'joinCode').value = code; gl.api.joinRoom(); clock.advance(100);
+  return { host: hl.api, guest: gl.api, hl, gl, clock, net, log, code, el };
+}
+module.exports = { makePair, handshake, makeNetPair };

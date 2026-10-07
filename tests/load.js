@@ -15,6 +15,7 @@ function extractScript(html) {
 function stubEl() {
   const el = new Proxy(function () {}, {
     get(t, k) {
+      if (k === 'value' || k === 'textContent' || k === 'innerHTML') return k in t ? t[k] : '';
       if (k === 'classList') return { add() {}, remove() {}, toggle() {}, contains: () => false };
       if (k === 'style') return {};
       if (k === 'dataset') return {};
@@ -32,8 +33,9 @@ function stubEl() {
 }
 
 function makeContext(extraSandbox = {}) {
+  const els = new Map();                                // como el DOM real: mismo id, mismo elemento
   const sandbox = {
-    document: { getElementById: () => stubEl(), querySelectorAll: () => [], createElement: () => stubEl(), addEventListener() {} },
+    document: { getElementById: id => { if (!els.has(id)) els.set(id, stubEl()); return els.get(id); }, querySelectorAll: () => [], createElement: () => stubEl(), addEventListener() {} },
     window: { addEventListener() {} },
     navigator: {},
     console, setTimeout, clearTimeout, setInterval, clearInterval,

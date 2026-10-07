@@ -363,6 +363,9 @@ const G = {
   mode:'place',         // 'place' | 'merge' | 'tech'
   battleSpeed:1,        // playback speed multiplier
   myReady:false, foeReady:false,
+  code:'', token:'',     // room code, and the secret that lets the same guest come back after a drop
+  sentReady:null,       // last 'ready' message I sent (re-sent after a reconnection)
+  reconnecting:false, foeAway:false,
   phase:'lobby',        // 'lobby' | 'plan' | 'battle' | 'between' | 'over' — gates which network messages apply
   pendingReady:null,    // foe's 'ready' for a later round that arrived early (buffered, applied in newRound)
   selected:null,
@@ -383,37 +386,47 @@ function setChip(on,txt){ const c=$('netChip'); c.textContent=txt; c.classList.t
 function randCode(){ const A='ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; let s=''; for(let i=0;i<6;i++) s+=A[Math.floor(Math.random()*A.length)]; return s; }
 const PREFIX='ironsiege-v1-';
 
+function wireHostPeer(pr, onError){
+  pr.on('open',()=>{ if(G.phase==='lobby') setChip(false,'SALA ABIERTA'); });
+  pr.on('connection', onIncoming);
+  // signaling link dropped (common on phones): the room id is kept if we reconnect quickly
+  // (delayed so a down signaling server is retried every 2s instead of in a tight loop)
+  pr.on('disconnected', ()=>{ setTimeout(()=>{ if(G.peer===pr && pr.disconnected && !pr.destroyed){ try{ pr.reconnect(); }catch(_){} } },2000); });
+  pr.on('error', onError||(()=>{}));
+}
 function hostCreate(){
   const name=$('playerName').value.trim();
   if(!name){ toast('Poné tu nombre primero'); return; }
   G.name=name; G.isHost=true;
-  const code=randCode();
+  const code=randCode(); G.code=code;
   $('roomCode').textContent=code;
   $('createBox').style.display='block';
   $('btnCreate').disabled=true;
   setChip(false,'INICIANDO…');
   G.peer=new Peer(PREFIX+code);
-  G.peer.on('open',()=> setChip(false,'SALA ABIERTA'));
-  G.peer.on('connection', onIncoming);
-  G.peer.on('disconnected', ()=>{ if(G.phase==='lobby'){ try{ G.peer.reconnect(); }catch(_){} } });
-  G.peer.on('error', e=>{
+  wireHostPeer(G.peer, e=>{
     if(e.type==='unavailable-id'){ $('roomCode').textContent=randCode(); /*retry*/ hostRetry(); }
     else { toast('Error de red: '+e.type); setChip(false,'ERROR'); $('btnCreate').disabled=false; }
   });
 }
-// Only one opponent per room: later connections to the same code are refused.
+// Lobby: one opponent per room. In a match: only the same guest (matching token) may come back.
 function onIncoming(c){
+  if(G.phase==='over'){ try{ c.close(); }catch(_){} return; }
+  if(G.phase!=='lobby'){
+    const md=c.metadata||{};
+    if(!G.isHost || !G.token || md.token!==G.token){ try{ c.close(); }catch(_){} return; }
+    const old=G.conn; G.conn=c;                   // replace the dead/zombie link
+    try{ if(old) old.close(); }catch(_){}
+    c._resume=true; wireConn(c); return;
+  }
   if(G.conn && G.conn.open){ try{ c.close(); }catch(_){} return; }
   G.conn=c; wireConn(c);
 }
 function hostRetry(){
   if(G.peer) G.peer.destroy();
-  const code=$('roomCode').textContent;
+  const code=$('roomCode').textContent; G.code=code;
   G.peer=new Peer(PREFIX+code);
-  G.peer.on('open',()=> setChip(false,'SALA ABIERTA'));
-  G.peer.on('connection', onIncoming);
-  G.peer.on('disconnected', ()=>{ if(G.phase==='lobby'){ try{ G.peer.reconnect(); }catch(_){} } });
-  G.peer.on('error', e=>{ toast('Error: '+e.type); });
+  wireHostPeer(G.peer, e=>{ toast('Error: '+e.type); });
 }
 
 function joinRoom(){
@@ -421,7 +434,7 @@ function joinRoom(){
   if(!name){ toast('Poné tu nombre primero'); return; }
   const code=$('joinCode').value.trim().toUpperCase();
   if(code.length<4){ toast('Código inválido'); return; }
-  G.name=name; G.isHost=false;
+  G.name=name; G.isHost=false; G.code=code;
   $('joinStatus').textContent='Conectando…';
   $('btnJoin').disabled=true;
   setChip(false,'CONECTANDO');
@@ -448,6 +461,7 @@ function joinFailed(why){
 function wireConn(c){
   c.on('open', ()=>{
     clearTimeout(G._joinT);
+    if(c._resume){ if(G.conn===c) onResumed(); return; }
     setChip(true,'CONECTADO');
     send({t:'hello', name:G.name});
   });
@@ -458,40 +472,92 @@ function wireConn(c){
 
 /* ---------- Connection health ---------- */
 // Heartbeat: both sides ping every 3s; 5 silent beats (~15s) = the rival is gone.
-const HB_MS=3000, HB_MAX_SILENT=5;
+const HB_MS=3000, HB_MAX_SILENT=5, AWAY_MAX_SILENT=40;
 function startHeartbeat(){
   stopHeartbeat(); G.silentTicks=0;
   G._hb=setInterval(()=>{
     send({t:'ping'});
-    if(++G.silentTicks>=HB_MAX_SILENT) connectionLost('El rival dejó de responder');
+    // a rival that told us it went to the background gets a long grace period (phones suspend tabs)
+    const limit = G.foeAway ? AWAY_MAX_SILENT : HB_MAX_SILENT;
+    if(++G.silentTicks>=limit) connectionLost('El rival dejó de responder');
   },HB_MS);
 }
 function stopHeartbeat(){ clearInterval(G._hb); G._hb=null; }
 function stopPlayback(){ if(pbTimer){ clearInterval(pbTimer); pbTimer=null; } clearTimeout(G._nrTimer); G._nrTimer=null; }
 function connectionLost(msg){
+  if(G.reconnecting) return;
   stopHeartbeat();
   setChip(false,'DESCONECTADO');
-  const inMatch = G.phase!=='lobby' && G.phase!=='over';
   if(G.phase==='lobby'){ toast(msg); return; }
-  G.conn=null;
-  if(inMatch){
-    stopPlayback();
-    G.phase='over';
-    $('btnReady').disabled=true; $('btnUndo').disabled=true;
-    $('phaseNote').textContent=msg+'. La partida no puede continuar.';
-    logLine(`✖ ${esc(msg)}. Partida interrumpida.`,'win');
-    toast(msg);
-  }
+  const old=G.conn; G.conn=null;                  // detach first so its close event is ignored
+  try{ if(old) old.close(); }catch(_){}
+  if(G.phase==='over'){ $('btnLobby').style.display=''; return; }   // match already decided: nothing to resume
+  beginReconnect(msg);
+}
+
+/* ---------- Reconnection ----------
+   A drop mid-match (phone backgrounded, Wi-Fi hiccup) does not end the game: both machines keep
+   their state (the sim is local and deterministic). The GUEST re-dials the host's room id and proves
+   who it is with the match token; the HOST keeps its peer alive and waits. On resume each side
+   re-sends its last 'ready', which the other ignores if it already has it (idempotent). */
+const RC_MS=5000, RC_MAX=24;                      // retry every 5s for ~2 minutes
+function beginReconnect(msg){
+  G.reconnecting=true; G.rcTicks=0;
+  $('phaseNote').textContent='⚠ '+msg+'. Reintentando conectar…';
+  toast('Reconectando…'); logLine('⚠ '+esc(msg)+'. Reintentando conectar…','');
+  $('btnLobby').style.display='';                 // the player can always give up
+  clearInterval(G._rc); G._rc=setInterval(rcTick,RC_MS); rcTick();
+}
+function rcTick(){
+  if(!G.reconnecting) return;
+  if(++G.rcTicks>RC_MAX){ giveUpReconnect(); return; }
+  try{ if(G.isHost) hostKeepListening(); else guestRedial(); }catch(_){}
+}
+function hostKeepListening(){
+  const pr=G.peer;
+  if(!pr || pr.destroyed){ G.peer=new Peer(PREFIX+G.code); wireHostPeer(G.peer); return; }
+  if(pr.disconnected){ try{ pr.reconnect(); }catch(_){} }
+}
+function guestRedial(){
+  const prev=G.peer, stale=G.conn; G.conn=null;
+  try{ if(stale) stale.close(); }catch(_){}
+  try{ if(prev) prev.destroy(); }catch(_){}
+  const pr=new Peer(); G.peer=pr;
+  pr.on('open',()=>{
+    if(G.peer!==pr || !G.reconnecting) return;
+    const c=pr.connect(PREFIX+G.code,{reliable:true,metadata:{token:G.token}});
+    c._resume=true; G.conn=c; wireConn(c);
+  });
+  pr.on('error',()=>{});                          // peer-unavailable etc: the next tick retries
+}
+function endReconnect(){ G.reconnecting=false; clearInterval(G._rc); G._rc=null; }
+function onResumed(){
+  endReconnect();
+  setChip(true,'CONECTADO'); toast('Reconectado');
+  logLine('✔ Conexión restablecida.','');
+  $('btnLobby').style.display='none';
+  $('phaseNote').textContent = G.phase==='battle' ? '⚔ COMBATE EN CURSO' : G.myReady ? 'Despliegue confirmado. Esperando al rival…' : '';
+  startHeartbeat();
+  if(G.sentReady) send(G.sentReady);              // the rival may have missed it while we were apart
+}
+function giveUpReconnect(){
+  endReconnect(); stopPlayback();
+  G.phase='over';
+  $('btnReady').disabled=true; $('btnUndo').disabled=true;
+  $('phaseNote').textContent='No se pudo reconectar. La partida no puede continuar.';
+  logLine('✖ No se pudo reconectar. Partida interrumpida.','win');
+  toast('No se pudo reconectar');
   $('btnLobby').style.display='';
 }
 function leaveToLobby(){
-  stopHeartbeat(); stopPlayback(); keepAwake(false);
+  stopHeartbeat(); stopPlayback(); keepAwake(false); endReconnect();
   const c=G.conn, pr=G.peer;
   G.conn=null; G.peer=null;                       // detach first so close events are ignored
   try{ if(c) c.close(); }catch(_){}
   try{ if(pr) pr.destroy(); }catch(_){}
   Object.assign(G,{ phase:'lobby', isHost:false, foeName:'RIVAL', myReady:false, foeReady:false, foeDeploy:null,
-    foeTech:{}, foeLastDeploy:null, foeLastTech:{}, pendingReady:null, myDeploy:[], myPending:[], myTech:{} });
+    foeTech:{}, foeLastDeploy:null, foeLastTech:{}, pendingReady:null, myDeploy:[], myPending:[], myTech:{},
+    code:'', token:'', sentReady:null, foeAway:false });
   $('log').innerHTML='';
   $('createBox').style.display='none';
   $('btnCreate').disabled=false; $('btnJoin').disabled=false;
@@ -506,20 +572,25 @@ function cleanName(n,def='RIVAL'){ return (typeof n==='string' && n.trim()) ? n.
 function onData(m){
   if(!m || typeof m!=='object') return;
   G.silentTicks=0;                                // any traffic proves the rival is alive
+  if(m.t!=='away' && G.foeAway){ G.foeAway=false; if(G.conn&&G.conn.open) setChip(true,'CONECTADO'); }
   switch(m.t){
     case 'ping': break;
+    case 'away': G.foeAway=true; setChip(true,'RIVAL AUSENTE'); break;
+    case 'back': break;
     case 'hello':
       if(G.phase!=='lobby') break;
       G.foeName=cleanName(m.name);
       if(G.isHost){ // exchange seeds: host picks base seed
         G.mySeedPart = (Math.random()*1e9)|0;
-        send({t:'seed', seed:G.mySeedPart, name:G.name});
+        G.token = randCode()+randCode()+randCode();   // lets this guest (and only this guest) resume after a drop
+        send({t:'seed', seed:G.mySeedPart, name:G.name, token:G.token});
       }
       break;
     case 'seed':
       if(G.phase!=='lobby') break;
       G.foeName=cleanName(m.name,G.foeName);
       G.foeSeedPart=m.seed>>>0;
+      G.token=typeof m.token==='string' ? m.token.slice(0,40) : '';
       if(!G.isHost){
         G.mySeedPart=(Math.random()*1e9)|0;
         send({t:'seed2', seed:G.mySeedPart, name:G.name});
@@ -589,7 +660,7 @@ function startMatch(){
   // combined in canonical (host, guest) order, never in (me, foe) order.
   G.seed = combineSeed(G.isHost?G.mySeedPart:G.foeSeedPart, G.isHost?G.foeSeedPart:G.mySeedPart);
   G.round=1; G.gold=G.income; G.winsMe=0; G.winsFoe=0;
-  G.myDeploy=[]; G.myPending=[]; G.myTech={}; G.foeTech={}; G.pendingReady=null;
+  G.myDeploy=[]; G.myPending=[]; G.myTech={}; G.foeTech={}; G.pendingReady=null; G.sentReady=null; G.foeAway=false; endReconnect();
   $('tagMe').textContent=G.name.toUpperCase();
   $('tagFoe').textContent=G.foeName.toUpperCase();
   show('scrGame');
@@ -891,7 +962,8 @@ function confirmReady(){
   G.myReady=true;
   $('btnReady').disabled=true; $('btnUndo').disabled=true;
   G.selected=null; renderShop();
-  send({t:'ready', round:G.round, deploy:G.myDeploy, tech:G.myTech});
+  G.sentReady={t:'ready', round:G.round, deploy:G.myDeploy, tech:G.myTech};
+  send(G.sentReady);
   $('phaseNote').textContent = G.foeReady ? 'Resolviendo combate…' : 'Despliegue confirmado. Esperando al rival…';
   tryResolve();
 }
@@ -1071,6 +1143,7 @@ function finishRound(result, myColorSide){
     logLine(`★ FIN DEL ASEDIO ★ Comandante <b class="${cls}">${esc(champ)}</b> conquista (${G.winsMe}–${G.winsFoe}).`,'win');
     $('phaseNote').textContent='Partida terminada. Volvé al lobby para jugar otra.';
     $('btnReady').disabled=true; $('btnUndo').disabled=true;
+    endReconnect();
     $('btnLobby').style.display='';   // heartbeat keeps running: a slow-playback rival must not look dead
     toast(G.winsMe>=3?'¡GANASTE EL ASEDIO!':'Perdiste el asedio');
     return;
@@ -1201,7 +1274,12 @@ async function keepAwake(on){
   }catch(_){}
 }
 document.addEventListener('visibilitychange',()=>{
-  if(document.visibilityState!=='visible') return;
+  const inMatch = G.phase!=='lobby' && G.phase!=='over';
+  if(document.visibilityState!=='visible'){ if(inMatch) send({t:'away'}); return; }
+  if(inMatch){
+    send({t:'back'});
+    if(!G.reconnecting && G.conn && !G.conn.open) connectionLost('Se cortó la conexión');
+  }
   if(G.phase!=='lobby' && G.phase!=='over') keepAwake(true);
   try{ if(G.peer && G.peer.disconnected && !G.peer.destroyed && (G.phase==='lobby')) G.peer.reconnect(); }catch(_){}
   refitAndRedraw();
