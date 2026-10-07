@@ -82,6 +82,35 @@ for (const budget of TRI_BUDGETS) for (const [a, b] of TRI) {
   check('handshake: host y guest comparten la misma semilla', ok, ok ? '200 handshakes' : `${bad}/200 con semillas distintas`);
 }
 
+// (e) sincronía de rondas con velocidades de reproducción distintas (host 4x, guest 0.5x)
+{
+  const { makePair, handshake } = require('./net');
+  const p = makePair(); handshake(p);
+  p.host.G.battleSpeed = 4; p.guest.G.battleSpeed = 0.5;
+  const addUnits = (m, y) => m.G.myDeploy.push({ id: 'warden', lvl: 1, x: 300, y }, { id: 'marauder', lvl: 1, x: 600, y });
+  const until = (cond) => { let g = 0; while (!cond() && g++ < 100000) p.clock.advance(50); return cond(); };
+  const fail = [];
+  // ronda 1
+  addUnits(p.host, 400); addUnits(p.guest, 380);
+  p.host.confirmReady(); p.pump(); p.guest.confirmReady(); p.pump();
+  if (p.host.G.phase !== 'battle' || p.guest.G.phase !== 'battle') fail.push('ronda 1 no arrancó');
+  // el host (4x) termina y pasa a planificar la ronda 2 mientras el guest (0.5x) sigue mirando la 1
+  if (!until(() => p.host.G.phase === 'plan')) fail.push('host no llegó a la ronda 2');
+  if (p.guest.G.phase !== 'battle') fail.push('el guest debía seguir en batalla, está en ' + p.guest.G.phase);
+  addUnits(p.host, 410);
+  p.host.confirmReady(); p.pump();                       // ready de la ronda 2 llega con el guest aún reproduciendo la 1
+  if (p.guest.G.phase !== 'battle') fail.push('el ready adelantado alteró la fase del guest');
+  if (p.log.guest.length !== 1) fail.push('el guest simuló de más: ' + p.log.guest.length);
+  if (!until(() => p.guest.G.phase === 'plan')) fail.push('guest no llegó a la ronda 2');
+  if (!p.guest.G.foeReady) fail.push('el ready adelantado se perdió en el guest');
+  addUnits(p.guest, 390);
+  p.guest.confirmReady(); p.pump();
+  const same = JSON.stringify(p.log.host) === JSON.stringify(p.log.guest);
+  if (p.log.host.length !== 2 || p.log.guest.length !== 2) fail.push(`sims host=${p.log.host.length} guest=${p.log.guest.length}, esperado 2`);
+  if (!same) fail.push('las simulaciones de host y guest difieren');
+  check('rondas: ready adelantado se bufferea y ambos simulan igual', fail.length === 0, fail.join('; ') || `2 sims idénticas en ambos lados`);
+}
+
 // --report: tabla de winrates entre todos los tipos y unidades
 if (process.argv.includes('--report')) {
   console.log('\nTriángulo por presupuesto (% victorias del que debería ganar):');

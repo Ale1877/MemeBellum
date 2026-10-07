@@ -322,6 +322,8 @@ const G = {
   mode:'place',         // 'place' | 'merge' | 'tech'
   battleSpeed:1,        // playback speed multiplier
   myReady:false, foeReady:false,
+  phase:'lobby',        // 'lobby' | 'plan' | 'battle' | 'between' | 'over' — gates which network messages apply
+  pendingReady:null,    // foe's 'ready' for a later round that arrived early (buffered, applied in newRound)
   selected:null,
   seed:0, mySeedPart:0, foeSeedPart:0,
   W:1000, H:440,
@@ -415,11 +417,7 @@ function onData(m){
       startMatch();
       break;
     case 'ready':
-      G.foeReady=true;
-      G.foeDeploy=m.deploy;
-      G.foeTech=m.tech||{};
-      $('phaseNote').textContent = G.myReady ? 'Resolviendo combate…' : 'Tu rival ya está listo. Esperándote.';
-      tryResolve();
+      onFoeReady(m);
       break;
     case 'rematch':
       toast('Rival quiere seguir'); break;
@@ -427,13 +425,32 @@ function onData(m){
 }
 
 /* ---------- Match flow ---------- */
+// 'ready' messages carry the round they belong to. Players watch battles at their own
+// local speed, so the rival can finish and confirm round N+1 while we are still
+// replaying round N: such messages are buffered until our own newRound(), never applied early.
+function onFoeReady(m){
+  if(G.phase==='lobby'||G.phase==='over') return;
+  if(!(m.round>=G.round)) return;                 // stale / duplicate from a previous round
+  if(m.round>G.round||G.phase!=='plan'){          // rival is ahead of us, or we are mid-battle
+    G.pendingReady=m; return;
+  }
+  applyFoeReady(m);
+}
+function applyFoeReady(m){
+  if(G.foeReady) return;                          // already have this round's deploy
+  G.foeReady=true;
+  G.foeDeploy=m.deploy;
+  G.foeTech=m.tech||{};
+  $('phaseNote').textContent = G.myReady ? 'Resolviendo combate…' : 'Tu rival ya está listo. Esperándote.';
+  tryResolve();
+}
 function combineSeed(hostPart, guestPart){ return (hostPart ^ Math.imul(guestPart,2654435761)) >>> 0; }
 function startMatch(){
   // combined deterministic seed, identical on both machines: the parts MUST be
   // combined in canonical (host, guest) order, never in (me, foe) order.
   G.seed = combineSeed(G.isHost?G.mySeedPart:G.foeSeedPart, G.isHost?G.foeSeedPart:G.mySeedPart);
   G.round=1; G.gold=G.income; G.winsMe=0; G.winsFoe=0;
-  G.myDeploy=[]; G.myPending=[]; G.myTech={}; G.foeTech={};
+  G.myDeploy=[]; G.myPending=[]; G.myTech={}; G.foeTech={}; G.pendingReady=null;
   $('tagMe').textContent=G.name.toUpperCase();
   $('tagFoe').textContent=G.foeName.toUpperCase();
   show('scrGame');
@@ -447,6 +464,7 @@ function newRound(first){
   G.myPending=[];
   G.myReady=false; G.foeReady=false; G.foeDeploy=null; G.foeTech={};
   G.selected=null; G.mode='place'; mergeFirst=null;
+  G.phase='plan';
   document.querySelectorAll('.modebar .mode').forEach(b=>b.classList.toggle('active',b.dataset.mode==='place'));
   updateHUD();
   renderShop();
@@ -455,6 +473,9 @@ function newRound(first){
   $('btnUndo').disabled=false;
   $('phaseNote').textContent='';
   updateSelHint();
+  // rival already confirmed this round while we were still watching the last battle
+  const pr=G.pendingReady; G.pendingReady=null;
+  if(pr && pr.round===G.round) applyFoeReady(pr);
 }
 
 function updateHUD(){
@@ -666,19 +687,21 @@ function drawMech(x,y,def,side,hpFrac,lvl,hl){
 }
 
 /* ---------- Ready / resolve ---------- */
-$('btnReady').onclick=()=>{
-  if(G.myReady) return;
+function confirmReady(){
+  if(G.phase!=='plan'||G.myReady) return;
   if(!G.myDeploy.length){ toast('Desplegá al menos una unidad'); return; }
   G.myReady=true;
   $('btnReady').disabled=true; $('btnUndo').disabled=true;
   G.selected=null; renderShop();
-  send({t:'ready', deploy:G.myDeploy, tech:G.myTech});
+  send({t:'ready', round:G.round, deploy:G.myDeploy, tech:G.myTech});
   $('phaseNote').textContent = G.foeReady ? 'Resolviendo combate…' : 'Despliegue confirmado. Esperando al rival…';
   tryResolve();
-};
+}
+$('btnReady').onclick=confirmReady;
 
 function tryResolve(){
-  if(!(G.myReady && G.foeReady && G.foeDeploy)) return;
+  if(G.phase!=='plan' || !(G.myReady && G.foeReady && G.foeDeploy)) return;
+  G.phase='battle';
   // Build entity list. Both machines build IDENTICAL input -> identical sim.
   // My units are 'side A' for me and 'side B' for opponent, but to stay identical
   // we order deterministically by a canonical owner key (host vs guest), not by "me".
@@ -838,9 +861,11 @@ function finishRound(result, myColorSide){
   else logLine(`Ronda ${G.round}: empate técnico (${myHP} vs ${foeHP}).`,'win');
 
   updateHUD();
+  G.phase='between';
 
   // match end?
   if(G.winsMe>=3||G.winsFoe>=3){
+    G.phase='over';
     const champ = G.winsMe>=3?G.name:G.foeName;
     const cls = G.winsMe>=3?'p1':'p2';
     logLine(`★ FIN DEL ASEDIO ★ Comandante <b class="${cls}">${esc(champ)}</b> conquista (${G.winsMe}–${G.winsFoe}).`,'win');
