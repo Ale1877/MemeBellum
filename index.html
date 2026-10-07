@@ -2,7 +2,8 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0a0e0a">
 <title>MECHABELLUM REMAKE // IRON SIEGE</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -25,6 +26,7 @@
   }
   *{box-sizing:border-box;margin:0;padding:0}
   html,body{height:100%}
+  html{-webkit-text-size-adjust:100%;text-size-adjust:100%;background:var(--bg)}
   body{
     background:
       radial-gradient(ellipse at 50% -10%, #12180f 0%, var(--bg) 60%),
@@ -32,7 +34,9 @@
     color:var(--ink);
     font-family:var(--mono);
     min-height:100vh;
-    padding:18px;
+    padding:calc(10px + env(safe-area-inset-top)) calc(10px + env(safe-area-inset-right)) calc(10px + env(safe-area-inset-bottom)) calc(10px + env(safe-area-inset-left));
+    -webkit-tap-highlight-color:transparent;
+    -webkit-user-select:none;user-select:none;
     display:flex;
     flex-direction:column;
     align-items:center;
@@ -62,22 +66,24 @@
   .card p.hint{font-size:12px;color:var(--ink-dim);margin-bottom:16px;line-height:1.5}
   label.fld{display:block;font-size:11px;letter-spacing:1px;color:var(--ink-dim);margin:14px 0 5px}
   input[type=text]{
+    -webkit-user-select:text;user-select:text;
     width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--phos);
-    font-family:var(--mono);font-size:15px;padding:11px 12px;letter-spacing:1px;outline:none;
+    font-family:var(--mono);font-size:16px;padding:11px 12px;letter-spacing:1px;outline:none;
   }
   input[type=text]:focus{border-color:var(--phos-dim);box-shadow:0 0 0 1px var(--phos-dim) inset}
   button{
+    touch-action:manipulation;
     font-family:var(--disp);font-weight:600;letter-spacing:2px;cursor:pointer;
     background:transparent;color:var(--phos);border:1px solid var(--phos-dim);
     padding:11px 16px;font-size:13px;transition:background .12s,color .12s;width:100%;margin-top:16px;
   }
-  button:hover:not(:disabled){background:var(--phos);color:#07120a}
+  @media (hover:hover){ button:hover:not(:disabled){background:var(--phos);color:#07120a} }
   button:disabled{opacity:.4;cursor:not-allowed}
   button.ghost{border-color:var(--line);color:var(--ink-dim)}
-  button.ghost:hover:not(:disabled){background:var(--line);color:var(--ink)}
+  @media (hover:hover){ button.ghost:hover:not(:disabled){background:var(--line);color:var(--ink)} }
   button.danger{border-color:#5a2420;color:var(--red)}
-  button.danger:hover:not(:disabled){background:var(--red);color:#1a0806}
-  .code-big{font-family:var(--disp);font-weight:700;font-size:30px;letter-spacing:8px;color:var(--amber);text-align:center;padding:14px;border:1px dashed var(--line);margin-top:8px;cursor:copy}
+  @media (hover:hover){ button.danger:hover:not(:disabled){background:var(--red);color:#1a0806} }
+  .code-big{font-family:var(--disp);font-weight:700;font-size:30px;letter-spacing:8px;color:var(--amber);text-align:center;padding:14px;border:1px dashed var(--line);margin-top:8px;cursor:copy;-webkit-user-select:all;user-select:all}
   .mini{font-size:11px;color:var(--ink-dim);margin-top:8px;text-align:center}
 
   /* ---------- Game HUD ---------- */
@@ -95,23 +101,23 @@
   .speed .lbl{font-size:10px;color:var(--ink-dim);letter-spacing:1px;margin-right:4px}
   .speed .spd{width:auto;margin-top:0;padding:7px 10px;font-size:12px;border-color:var(--line);color:var(--ink-dim)}
   .speed .spd.active{border-color:var(--phos-dim);color:var(--phos)}
-  .speed .spd:hover:not(.active){background:var(--line);color:var(--ink)}
+  @media (hover:hover){ .speed .spd:hover:not(.active){background:var(--line);color:var(--ink)} }
 
   .board-wrap{display:grid;grid-template-columns:1fr;gap:12px}
-  canvas#field{width:100%;background:
+  canvas#field{width:100%;height:auto;touch-action:pan-y;background:
     linear-gradient(0deg,#0c110b,#0a0e0a);
     border:1px solid var(--line);display:block;touch-action:none}
 
   .shop{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-top:14px}
   .unit-card{background:var(--panel);border:1px solid var(--line);padding:10px;cursor:pointer;transition:border-color .1s,transform .05s;user-select:none}
-  .unit-card:hover{border-color:var(--phos-dim)}
+  @media (hover:hover){ .unit-card:hover{border-color:var(--phos-dim)} }
   .unit-card:active{transform:scale(.98)}
   .unit-card.cant{opacity:.45;cursor:not-allowed}
   .unit-card .ic{font-size:20px}
   .unit-card .nm{font-family:var(--disp);font-weight:600;font-size:13px;letter-spacing:1px;margin-top:4px;color:var(--ink)}
   .unit-card .cost{color:var(--amber);font-size:12px;margin-top:3px}
   .unit-card .role{color:var(--ink-dim);font-size:10px;margin-top:4px;line-height:1.3}
-  .unit-card .cnt{float:right;color:var(--phos);font-size:12px}
+  .unit-card .cnt{position:absolute;top:32px;right:8px;color:var(--phos);font-size:12px}
 
   .log{background:var(--panel2);border:1px solid var(--line);height:150px;overflow-y:auto;padding:10px;font-size:12px;line-height:1.55;margin-top:14px}
   .log .r{color:var(--ink-dim)}
@@ -122,7 +128,7 @@
   .modebar{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
   .modebar .mode{width:auto;flex:1;min-width:120px;margin-top:0;font-size:12px;padding:9px 10px;border-color:var(--line);color:var(--ink-dim)}
   .modebar .mode.active{border-color:var(--phos-dim);color:var(--phos)}
-  .modebar .mode:hover:not(.active){background:var(--line);color:var(--ink)}
+  @media (hover:hover){ .modebar .mode:hover:not(.active){background:var(--line);color:var(--ink)} }
   .unit-card .tech-tag{display:block;margin-top:5px;font-size:10px;color:var(--ink-dim);border-top:1px solid var(--line);padding-top:4px}
   .unit-card .tech-tag.has{color:var(--amber)}
   .lvl-badge{position:absolute;top:4px;right:5px;font-size:10px;color:#07120a;background:var(--amber);padding:0 4px;font-family:var(--disp);font-weight:700}
@@ -131,14 +137,14 @@
   .phase-note{font-size:12px;color:var(--ink-dim);margin-top:10px;min-height:16px;letter-spacing:.5px}
   .selhint{font-size:12px;color:var(--amber);min-height:16px;margin-top:4px}
 
-  .toast{position:fixed;top:16px;left:50%;transform:translateX(-50%);background:var(--panel);border:1px solid var(--phos-dim);color:var(--phos);padding:10px 18px;font-size:13px;letter-spacing:1px;z-index:80;display:none}
+  .toast{position:fixed;top:calc(12px + env(safe-area-inset-top));left:0;right:0;margin:0 auto;width:max-content;max-width:calc(100vw - 24px);text-align:center;pointer-events:none;background:var(--panel);border:1px solid var(--phos-dim);color:var(--phos);padding:10px 18px;font-size:13px;letter-spacing:1px;z-index:80;display:none}
 
   /* ---------- Modal ---------- */
   .modal-bg{position:fixed;inset:0;background:rgba(4,8,4,.78);z-index:60;display:none;align-items:center;justify-content:center;padding:18px}
   .modal-bg.show{display:flex}
-  .modal{background:var(--panel);border:1px solid var(--phos-dim);max-width:420px;width:100%;padding:22px;position:relative;box-shadow:0 0 40px rgba(125,255,107,.1)}
+  .modal{background:var(--panel);border:1px solid var(--phos-dim);max-width:420px;width:100%;max-height:calc(100vh - 36px);max-height:calc(100dvh - 36px);overflow-y:auto;-webkit-overflow-scrolling:touch;padding:22px;position:relative;box-shadow:0 0 40px rgba(125,255,107,.1)}
   .modal-x{position:absolute;top:8px;right:10px;width:auto;margin:0;border:none;color:var(--ink-dim);font-size:22px;padding:2px 8px;background:transparent}
-  .modal-x:hover{background:transparent;color:var(--red)}
+  @media (hover:hover){ .modal-x:hover{background:transparent;color:var(--red)} }
   .modal .m-head{display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--line);padding-bottom:12px;margin-bottom:12px}
   .modal .m-ic{font-size:34px}
   .modal .m-name{font-family:var(--disp);font-weight:700;font-size:20px;letter-spacing:2px;color:var(--phos)}
@@ -155,10 +161,41 @@
   .modal .m-adv .good{color:var(--phos)}
   .modal .m-adv .bad{color:var(--red)}
   .unit-card .info-btn{position:absolute;top:4px;right:5px;width:auto;margin:0;border:1px solid var(--line);color:var(--ink-dim);font-size:11px;padding:1px 6px;line-height:1.4;background:transparent;font-family:var(--mono)}
-  .unit-card .info-btn:hover{border-color:var(--phos-dim);color:var(--phos);background:transparent}
+  @media (hover:hover){ .unit-card .info-btn:hover{border-color:var(--phos-dim);color:var(--phos);background:transparent} }
+
 
   .legend{display:flex;gap:16px;flex-wrap:wrap;font-size:11px;color:var(--ink-dim);margin-top:10px}
   .legend span b{color:var(--ink)}
+
+  /* ---------- Touch / small screens ---------- */
+  @media (pointer:coarse){
+    button{min-height:44px}
+    .speed .spd{min-height:44px;min-width:44px}
+    .unit-card .info-btn{min-width:36px;min-height:36px;font-size:15px}
+    .modal-x{min-width:44px;min-height:44px}
+    .toast{max-width:calc(100vw - 24px)}
+  }
+  @media (min-width:721px){ body{padding:18px} }
+  @media (max-width:600px){
+    header.app{margin-bottom:12px}
+    .sub{font-size:9px;letter-spacing:1px}
+    .card{padding:16px}
+    .hud{gap:6px;margin-bottom:8px}
+    .hud .seg{gap:8px 14px}
+    .stat b{font-size:15px}
+    .topbar{gap:8px}
+    .topbar #btnReady{min-width:100%}
+    .speed{width:100%;justify-content:space-between}
+    .speed .spd{flex:1}
+    .legend{display:none}
+    .shop{grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:6px}
+    .unit-card{padding:8px}
+    .unit-card .role{display:none}
+    .unit-card .tech-tag{font-size:10px}
+    .log{height:110px}
+    .modebar .mode{min-width:0;letter-spacing:1px;padding:9px 4px;font-size:11px}
+    .code-big{font-size:26px;letter-spacing:6px}
+  }
 </style>
 </head>
 <body>
@@ -174,7 +211,7 @@
 <!-- ============ LOBBY ============ -->
 <section class="screen active" id="scrLobby">
   <label class="fld">NOMBRE DE COMANDANTE</label>
-  <input type="text" id="playerName" maxlength="14" placeholder="escribí tu nombre" autocomplete="off">
+  <input type="text" id="playerName" maxlength="14" placeholder="escribí tu nombre" autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="done">
   <div class="lobby-grid" style="margin-top:20px">
     <div class="card">
       <h2>CREAR PARTIDA</h2>
@@ -182,7 +219,8 @@
       <button id="btnCreate">CREAR SALA</button>
       <div id="createBox" style="display:none">
         <div class="code-big" id="roomCode" title="click para copiar">----</div>
-        <div class="mini">Pasale este código a tu rival · click para copiar</div>
+        <div class="mini">Pasale este código a tu rival · tocá para copiar</div>
+        <button class="ghost" id="btnShare">COMPARTIR ENLACE</button>
         <div class="phase-note" id="createWait">Esperando oponente…</div>
       </div>
     </div>
@@ -190,7 +228,7 @@
       <h2>UNIRSE</h2>
       <p class="hint">Pegá el código que te pasaron y entrás a la sala.</p>
       <label class="fld">CÓDIGO DE SALA</label>
-      <input type="text" id="joinCode" maxlength="6" placeholder="ABC123" autocomplete="off" style="text-transform:uppercase">
+      <input type="text" id="joinCode" maxlength="6" placeholder="ABC123" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false" enterkeyhint="go" style="text-transform:uppercase">
       <button id="btnJoin">UNIRSE A SALA</button>
       <div class="phase-note" id="joinStatus"></div>
     </div>
@@ -230,7 +268,7 @@
   <div class="legend">
     <span><b style="color:var(--phos)">■</b> tu zona de despliegue (mitad inferior)</span>
     <span><b style="color:var(--red)">■</b> zona enemiga (mitad superior, oculta hasta el combate)</span>
-    <span><b>tip:</b> tocá una unidad en tienda, luego el campo para desplegar</span>
+    <span><b>tip:</b> tocá una unidad en la tienda, luego el campo para desplegar</span>
   </div>
 
   <div class="modebar" id="modeBar">
@@ -444,7 +482,7 @@ function connectionLost(msg){
   $('btnLobby').style.display='';
 }
 function leaveToLobby(){
-  stopHeartbeat(); stopPlayback();
+  stopHeartbeat(); stopPlayback(); keepAwake(false);
   const c=G.conn, pr=G.peer;
   G.conn=null; G.peer=null;                       // detach first so close events are ignored
   try{ if(c) c.close(); }catch(_){}
@@ -552,8 +590,10 @@ function startMatch(){
   $('tagMe').textContent=G.name.toUpperCase();
   $('tagFoe').textContent=G.foeName.toUpperCase();
   show('scrGame');
+  fitCanvas();
   $('btnLobby').style.display='none';
   startHeartbeat();
+  keepAwake(true);
   buildShop();
   newRound(true);
   logLine(`Conexión establecida. <b class="p1">${esc(G.name)}</b> vs <b class="p2">${esc(G.foeName)}</b>. ¡Que empiece el asedio!`,'win');
@@ -658,30 +698,57 @@ function updateSelHint(){
 
 /* ---------- Field / deploy ---------- */
 const field=$('field'), ctx=field.getContext('2d');
+// View: the sim/deploy world is always G.W x G.H logical units. The canvas is sized in CSS pixels
+// (taller on narrow screens so a finger can place units) and its backing store follows the
+// device pixel ratio, so it stays sharp on phones. All drawing happens in CSS pixels.
+const V={w:1000,h:440,dpr:1,sx:1,sy:1};
+function fitCanvas(){
+  const w=Math.round(field.getBoundingClientRect().width);
+  if(!(w>0)) return false;                       // screen hidden (display:none)
+  const h=Math.round(w>=720 ? w*G.H/G.W : Math.min(w*0.95,480));
+  const dpr=Math.min((typeof window!=='undefined' && window.devicePixelRatio)||1,3);
+  field.style.height=h+'px';
+  field.width=Math.round(w*dpr); field.height=Math.round(h*dpr);
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  Object.assign(V,{w,h,dpr,sx:w/G.W,sy:h/G.H});
+  return true;
+}
 function canvasPos(e){
   const r=field.getBoundingClientRect();
   const x=(e.clientX-r.left)/r.width*G.W;
   const y=(e.clientY-r.top)/r.height*G.H;
   return {x,y};
 }
-field.addEventListener('pointerdown', e=>{
-  const p=canvasPos(e);
+// A deploy is a TAP (down+up with little movement), not a bare pointerdown, so scrolling the
+// page with a finger that starts on the field never places or selects anything by accident.
+let tapStart=null;
+field.addEventListener('pointerdown', e=>{ tapStart={id:e.pointerId,x:e.clientX,y:e.clientY}; });
+field.addEventListener('pointercancel', ()=>{ tapStart=null; });
+field.addEventListener('pointerup', e=>{
+  const t=tapStart; tapStart=null;
+  if(!t || t.id!==e.pointerId || Math.hypot(e.clientX-t.x,e.clientY-t.y)>12) return;
+  onFieldTap(canvasPos(e));
+});
+function onFieldTap(p){
+  if(G.phase!=='plan' || G.myReady) return;
   if(G.mode==='merge'){ handleMerge(p); return; }
   if(G.mode!=='place' || !G.selected) return;
   if(p.y < G.H*0.52){ toast('Desplegá en tu mitad (abajo)'); return; }
   const u=UNITS[G.selected];
   if(G.gold<u.cost){ toast('Sin créditos'); G.selected=null; renderShop(); return; }
   G.gold-=u.cost;
-  const entry={id:u.id,lvl:1,x:Math.max(24,Math.min(G.W-24,p.x)),y:Math.max(G.H*0.54,Math.min(G.H-20,p.y))};
+  const mx=18/V.sx, my=18/V.sy;                  // keep the sprite fully on screen at any canvas size
+  const entry={id:u.id,lvl:1,x:Math.max(mx,Math.min(G.W-mx,p.x)),y:Math.max(G.H*0.54,Math.min(G.H-my,p.y))};
   G.myDeploy.push(entry);
   G.myPending.push({kind:'place',entry,cost:u.cost});
   if(G.gold<u.cost){ G.selected=null; updateSelHint(); }
   updateHUD(); renderShop(); drawField(null);
-});
+}
 
+// hit radius is measured in CSS pixels (finger-sized), whatever the canvas scale
 function nearestMyUnit(p){
-  let best=-1,bd=900;
-  G.myDeploy.forEach((d,i)=>{ const dx=d.x-p.x,dy=d.y-p.y,dd=dx*dx+dy*dy; if(dd<bd){bd=dd;best=i;} });
+  let best=-1,bd=44*44;
+  G.myDeploy.forEach((d,i)=>{ const dx=(d.x-p.x)*V.sx,dy=(d.y-p.y)*V.sy,dd=dx*dx+dy*dy; if(dd<bd){bd=dd;best=i;} });
   return best;
 }
 function handleMerge(p){
@@ -731,42 +798,45 @@ document.querySelectorAll('.modebar .mode').forEach(btn=>{
 
 /* ---------- Draw ---------- */
 function drawField(sim, highlightIdx){
-  ctx.clearRect(0,0,G.W,G.H);
+  G._view=sim||null;                              // remembered so a resize/rotation can redraw the current frame
+  const w=V.w, h=V.h, X=x=>x*V.sx, Y=y=>y*V.sy;
+  ctx.clearRect(0,0,w,h);
   // mid line + zones
-  ctx.fillStyle='rgba(255,90,77,.04)'; ctx.fillRect(0,0,G.W,G.H*0.5);
-  ctx.fillStyle='rgba(125,255,107,.04)'; ctx.fillRect(0,G.H*0.5,G.W,G.H*0.5);
-  ctx.strokeStyle='#1e2a1e'; ctx.setLineDash([6,6]); ctx.beginPath();
-  ctx.moveTo(0,G.H*0.5); ctx.lineTo(G.W,G.H*0.5); ctx.stroke(); ctx.setLineDash([]);
+  ctx.fillStyle='rgba(255,90,77,.04)'; ctx.fillRect(0,0,w,h*0.5);
+  ctx.fillStyle='rgba(125,255,107,.04)'; ctx.fillRect(0,h*0.5,w,h*0.5);
+  ctx.strokeStyle='#1e2a1e'; ctx.lineWidth=1; ctx.setLineDash([6,6]); ctx.beginPath();
+  ctx.moveTo(0,h*0.5); ctx.lineTo(w,h*0.5); ctx.stroke(); ctx.setLineDash([]);
 
   if(sim){
     // beams: straight line attacker -> target (cheap, readable)
     ctx.lineWidth=1;
     for(const b of sim.shots){
       ctx.strokeStyle = b.s==='me' ? 'rgba(125,255,107,.5)' : 'rgba(255,90,77,.5)';
-      ctx.beginPath(); ctx.moveTo(b.fx,b.fy); ctx.lineTo(b.tx,b.ty); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(X(b.fx),Y(b.fy)); ctx.lineTo(X(b.tx),Y(b.ty)); ctx.stroke();
     }
-    for(const e of sim.ents){ if(e.hp>0) drawMech(e.x,e.y,e.def,e.side,e.hp/e.maxhp,e.lvl,false); }
+    for(const e of sim.ents){ if(e.hp>0) drawMech(X(e.x),Y(e.y),e.def,e.side,e.hp/e.maxhp,e.lvl,false); }
   } else {
     // enemy intel: opponent's units from LAST round, mirrored into top half (ghosted)
     if(G.foeLastDeploy){
       ctx.globalAlpha=0.5;
       for(const d of G.foeLastDeploy){
         const my=G.H-d.y; // mirror to top
-        drawMech(d.x, Math.min(G.H*0.44, my), UNITS[d.id],'foe',1,d.lvl,false);
+        drawMech(X(d.x), Y(Math.min(G.H*0.44, my)), UNITS[d.id],'foe',1,d.lvl,false);
       }
       ctx.globalAlpha=1;
       ctx.fillStyle='#ff5a4d';
-      ctx.font='10px "Share Tech Mono"'; ctx.textAlign='left';
-      ctx.fillText('↑ RIVAL (ronda anterior)', 10, 14);
+      ctx.font='11px "Share Tech Mono"'; ctx.textAlign='left';
+      ctx.fillText('↑ RIVAL (ronda anterior)', 10, 15);
       const foeTechs=Object.keys(G.foeLastTech||{}).map(k=>UNITS[k].tech.name);
       if(foeTechs.length){
         ctx.fillStyle='#ffb347';
-        ctx.fillText('tech rival: '+foeTechs.join(', '), 10, 28);
+        ctx.fillText('tech rival: '+foeTechs.join(', '), 10, 30);
       }
     }
-    G.myDeploy.forEach((d,i)=> drawMech(d.x,d.y,UNITS[d.id],'me',d.dmgFrac!=null?d.dmgFrac:1,d.lvl, i===highlightIdx));
+    G.myDeploy.forEach((d,i)=> drawMech(X(d.x),Y(d.y),UNITS[d.id],'me',d.dmgFrac!=null?d.dmgFrac:1,d.lvl, i===highlightIdx));
   }
 }
+// x,y are CSS pixels on the canvas; sprite sizes are CSS pixels too (readable on any screen)
 function drawMech(x,y,def,side,hpFrac,lvl,hl){
   const col = side==='me' ? '#7dff6b' : '#ff5a4d';
   const r = (def.type==='heavy'?13 : def.type==='swarm'?6 : 9) + (lvl>1?(lvl-1)*2:0);
@@ -1072,9 +1142,46 @@ function esc(s){ return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;',
 $('btnCreate').onclick=hostCreate;
 $('btnJoin').onclick=joinRoom;
 $('btnLobby').onclick=leaveToLobby;
-$('roomCode').onclick=()=>{ navigator.clipboard?.writeText($('roomCode').textContent); toast('Código copiado'); };
+/* ---------- Mobile conveniences ---------- */
+function copyText(t){
+  try{ if(navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(t).then(()=>true,()=>false); }catch(_){}
+  return new Promise(res=>{                       // fallback for non-secure contexts / older webviews
+    const ta=document.createElement('textarea'); ta.value=t; ta.setAttribute('readonly','');
+    ta.style.cssText='position:fixed;top:0;left:0;opacity:0'; document.body.appendChild(ta); ta.select();
+    let ok=false; try{ ok=document.execCommand('copy'); }catch(_){}
+    ta.remove(); res(ok);
+  });
+}
+function roomLink(){ return location.origin+location.pathname+'?sala='+$('roomCode').textContent; }
+$('roomCode').onclick=()=>copyText($('roomCode').textContent).then(ok=>toast(ok?'Código copiado':'Mantené apretado el código para copiarlo'));
+$('btnShare').onclick=async()=>{
+  const code=$('roomCode').textContent, url=roomLink();
+  if(navigator.share){ try{ await navigator.share({title:'IRON SIEGE',text:'Unite a mi partida. Código: '+code,url}); return; }catch(e){ if(e&&e.name==='AbortError') return; } }
+  copyText(url).then(ok=>toast(ok?'Enlace copiado':'No se pudo copiar el enlace'));
+};
+// opening ?sala=ABC123 pre-fills the join code
+try{ const q=new URLSearchParams(location.search).get('sala'); if(q){ $('joinCode').value=q.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,6); toast('Código cargado: poné tu nombre y unite'); } }catch(_){}
+$('joinCode').addEventListener('keydown',e=>{ if(e.key==='Enter') joinRoom(); });
+
+// Phones suspend backgrounded tabs: keep the screen awake during a match, and when the user comes
+// back from another app (e.g. pasting the room code into a chat) bring the signaling link back.
+let wakeLock=null;
+async function keepAwake(on){
+  try{
+    if(!on){ if(wakeLock){ await wakeLock.release(); wakeLock=null; } return; }
+    if(navigator.wakeLock && !wakeLock){ wakeLock=await navigator.wakeLock.request('screen'); wakeLock.addEventListener('release',()=>{ wakeLock=null; }); }
+  }catch(_){}
+}
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState!=='visible') return;
+  if(G.phase!=='lobby' && G.phase!=='over') keepAwake(true);
+  try{ if(G.peer && G.peer.disconnected && !G.peer.destroyed && (G.phase==='lobby')) G.peer.reconnect(); }catch(_){}
+  refitAndRedraw();
+});
 $('joinCode').addEventListener('input',e=>e.target.value=e.target.value.toUpperCase());
-window.addEventListener('resize',()=>drawField(null));
+function refitAndRedraw(){ if(fitCanvas()) drawField(G._view||null); }
+window.addEventListener('resize',refitAndRedraw);
+window.addEventListener('orientationchange',()=>setTimeout(refitAndRedraw,250));
 $('modalX').onclick=closeModal;
 $('modalBg').onclick=(e)=>{ if(e.target===$('modalBg')) closeModal(); };
 document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeModal(); });
