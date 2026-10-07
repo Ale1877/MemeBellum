@@ -1,0 +1,56 @@
+// Carga el <script> de index.html en un contexto de Node con stubs de DOM,
+// y expone las funciones internas para testear (simulate, UNITS, etc.).
+const fs = require('fs');
+const path = require('path');
+const vm = require('vm');
+
+const HTML_PATH = path.join(__dirname, '..', 'index.html');
+
+function extractScript(html) {
+  const blocks = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m => m[1]);
+  if (blocks.length !== 1) throw new Error('Se esperaba exactamente un <script> inline, hay ' + blocks.length);
+  return blocks[0];
+}
+
+function stubEl() {
+  const el = new Proxy(function () {}, {
+    get(t, k) {
+      if (k === 'classList') return { add() {}, remove() {}, toggle() {}, contains: () => false };
+      if (k === 'style') return {};
+      if (k === 'dataset') return {};
+      if (k === 'getContext') return () => new Proxy({}, { get: () => () => {} , set: () => true });
+      if (k === 'querySelector') return () => stubEl();
+      if (k === 'querySelectorAll') return () => [];
+      if (k === 'getBoundingClientRect') return () => ({ left: 0, top: 0, width: 1000, height: 440 });
+      if (k in t) return t[k];
+      return () => stubEl();
+    },
+    set(t, k, v) { t[k] = v; return true; },
+    apply() { return stubEl(); },
+  });
+  return el;
+}
+
+function makeContext(extraSandbox = {}) {
+  const sandbox = {
+    document: { getElementById: () => stubEl(), querySelectorAll: () => [], createElement: () => stubEl(), addEventListener() {} },
+    window: { addEventListener() {} },
+    navigator: {},
+    console, setTimeout, clearTimeout, setInterval, clearInterval,
+    Peer: function () { throw new Error('Peer no disponible en tests'); },
+    ...extraSandbox,
+  };
+  sandbox.window.setTimeout = setTimeout;
+  return vm.createContext(sandbox);
+}
+
+// names: lista de identificadores top-level a exponer
+function loadGame(names = ['simulate', 'UNITS', 'TYPE_ADV', 'G', 'makeRNG', 'lvlMult', 'expand'], extraSandbox = {}) {
+  const src = extractScript(fs.readFileSync(HTML_PATH, 'utf8'));
+  const ctx = makeContext(extraSandbox);
+  const exportCode = `\n;globalThis.__api = { ${names.map(n => `get ${n}(){ return typeof ${n}==='undefined'?undefined:${n}; }`).join(', ')} };`;
+  vm.runInContext(src + exportCode, ctx, { filename: 'index.html<script>' });
+  return { api: ctx.__api, ctx };
+}
+
+module.exports = { loadGame, extractScript, HTML_PATH };
