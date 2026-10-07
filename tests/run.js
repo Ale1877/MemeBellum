@@ -178,6 +178,7 @@ for (const budget of TRI_BUDGETS) for (const [a, b] of TRI) {
     if (p.log.lost.host || p.log.lost.guest) fail.push('desconexión falsa en partida normal: ' + JSON.stringify(p.log.lost));
     if (JSON.stringify(p.log.host) !== JSON.stringify(p.log.guest)) fail.push('simulaciones distintas a lo largo de la partida');
     if (p.host.G.winsMe !== p.guest.G.winsFoe || p.host.G.winsFoe !== p.guest.G.winsMe) fail.push('marcadores distintos');
+    if (p.host.G.baseMe !== p.guest.G.baseFoe || p.host.G.baseFoe !== p.guest.G.baseMe) fail.push('bases distintas entre host y guest');
   }
   // 2. silencio del rival: se detecta en ~15s y arranca la reconexión (la partida NO se corta); sin éxito en ~2min se da por perdida
   {
@@ -314,7 +315,8 @@ for (const budget of TRI_BUDGETS) for (const [a, b] of TRI) {
     const H = p.host.G, Gu = p.guest.G;
     if (!(H.phase === 'over' && Gu.phase === 'over')) fail.push(`B: la partida no terminó (${H.phase}/${Gu.phase})`);
     if (kills < 2) fail.push('B: el test no llegó a cortar la red');
-    if (H.winsMe !== Gu.winsFoe || H.winsFoe !== Gu.winsMe || (H.winsMe < 3 && H.winsFoe < 3)) fail.push(`B: marcadores ${H.winsMe}-${H.winsFoe} vs ${Gu.winsMe}-${Gu.winsFoe}`);
+    if (H.winsMe !== Gu.winsFoe || H.winsFoe !== Gu.winsMe || !H.matchEnded) fail.push(`B: marcadores ${H.winsMe}-${H.winsFoe} vs ${Gu.winsMe}-${Gu.winsFoe}`);
+    if (H.baseMe !== Gu.baseFoe || H.baseFoe !== Gu.baseMe) fail.push(`B: bases distintas (${H.baseMe}/${H.baseFoe} vs ${Gu.baseMe}/${Gu.baseFoe})`);
     if (JSON.stringify(p.log.host) !== JSON.stringify(p.log.guest)) fail.push('B: simulaciones distintas entre host y guest');
     if (/No se pudo reconectar/.test(p.el(p.hl, 'phaseNote').textContent + p.el(p.gl, 'phaseNote').textContent)) fail.push('B: se rindió al reconectar');
   }
@@ -476,6 +478,7 @@ for (const budget of TRI_BUDGETS) for (const [a, b] of TRI) {
   // estado "partida terminada" con restos de la anterior que NO deben heredarse
   for (const m of [H, Gu]) { m.G.phase = 'over'; m.G.income = 520; m.G.round = 6; m.G.foeLastDeploy = [{ id: 'titan', lvl: 2, x: 1, y: 300 }]; m.G.foeLastTech = { titan: true }; }
   H.G.winsMe = 3; H.G.winsFoe = 1; Gu.G.winsMe = 1; Gu.G.winsFoe = 3;
+  H.G.baseMe = 340; H.G.baseFoe = 0; Gu.G.baseMe = 0; Gu.G.baseFoe = 340; H.G.matchEnded = true; Gu.G.matchEnded = true;   // partida terminada: la base del guest cayó
   H.requestRematch(); p.pump(); run(500);
   if (H.G.phase !== 'over' || Gu.G.phase !== 'over') fail.push('arrancó con un solo jugador pidiendo la revancha');
   Gu.requestRematch(); p.pump(); run(1000);
@@ -483,6 +486,7 @@ for (const budget of TRI_BUDGETS) for (const [a, b] of TRI) {
     const G = m.G;
     if (G.phase !== 'plan' || G.round !== 1 || G.winsMe !== 0 || G.winsFoe !== 0) fail.push(`${n}: no reinició (fase ${G.phase}, ronda ${G.round}, ${G.winsMe}-${G.winsFoe})`);
     if (G.income !== 200 || G.gold !== 200) fail.push(`${n}: economía heredada (ingreso ${G.income}, oro ${G.gold})`);
+    if (G.baseMe !== 1000 || G.baseFoe !== 1000 || G.matchEnded) fail.push(`${n}: bases/estado de la partida anterior heredados (${G.baseMe}/${G.baseFoe})`);
     if (G.foeLastDeploy !== null || Object.keys(G.foeLastTech).length) fail.push(`${n}: heredó el intel de la partida anterior`);
     if (G.rematchMe || G.foeRematch) fail.push(`${n}: banderas de revancha sin limpiar`);
   }
@@ -790,6 +794,132 @@ pending.push((async () => {
     if (JSON.stringify(H.Rec.cur.rounds) !== JSON.stringify(Gu.Rec.cur.rounds)) fail.push('B: el replay grabó entradas distintas en host y guest'); }
 
   check('respawn estilo Mechabellum: todo el ejército (destruidas y supervivientes) vuelve a pleno HP, intacto y con la misma simulación', fail.length === 0, fail.slice(0, 4).join('; '));
+}
+
+// (v) vida de base: daño al perdedor según las unidades que le quedan al ganador; gana quien destruye la base rival
+{
+  const { makePair, handshake } = require('./net');
+  const fail = [];
+  const p = makePair({ raf: true }); handshake(p);
+  const H = p.host, Gu = p.guest;
+  // A. fórmula exacta: 20 + 0.30 * (costo por miembro * 2^(nivel-1)) de cada superviviente del ganador
+  const one = (id, lvl) => H.simulate([{ id, lvl, x: 500, y: 400 }], [], {}, {}, 1);
+  const val = (id, lvl, n) => Math.round(20 + 0.30 * (H.UNITS[id].cost / H.UNITS[id].count) * n * Math.pow(2, lvl - 1));
+  for (const [id, lvl] of [['warden', 1], ['warden', 2], ['titan', 1], ['crawler', 1], ['mortar', 1]]) {
+    const r = one(id, lvl), want = val(id, lvl, H.UNITS[id].count);
+    if (r.winner !== 'host' || r.baseDmg.guest !== want || r.baseDmg.host !== 0) fail.push(`A: ${id} L${lvl}: daño ${JSON.stringify(r.baseDmg)} (esperado ${want} al guest)`);
+  }
+  const d = H.simulate([], [], {}, {}, 1); if (d.winner !== 'draw' || d.baseDmg.host !== 0 || d.baseDmg.guest !== 0) fail.push('A: un empate no debe hacer daño: ' + JSON.stringify(d.baseDmg));
+  const g = H.simulate([], [{ id: 'warden', lvl: 1, x: 500, y: 400 }], {}, {}, 1); if (g.baseDmg.host !== val('warden', 1, 1) || g.baseDmg.guest !== 0) fail.push('A: si gana el guest el daño es al host: ' + JSON.stringify(g.baseDmg));
+  // B. matchOutcome: base a 0, límite de rondas por mayor base, empate
+  const mo = (b1, b2, r) => { H.G.baseMe = b1; H.G.baseFoe = b2; H.G.round = r; return H.matchOutcome(); };
+  if (mo(500, 0, 3) !== 'me' || mo(0, 500, 3) !== 'foe' || mo(0, 0, 3) !== 'draw' || mo(500, 400, 3) !== null) fail.push('B: matchOutcome por base destruida');
+  if (mo(700, 400, 12) !== 'me' || mo(300, 400, 12) !== 'foe' || mo(400, 400, 12) !== 'draw' || mo(700, 400, 11) !== null) fail.push('B: matchOutcome por límite de rondas');
+  H.G.baseMe = 1000; H.G.baseFoe = 1000; H.G.round = 1;
+
+  // C. partida real desigual: el host aplasta al guest; termina cuando la base del guest llega a 0, antes del límite de rondas
+  const q = makePair({ raf: true }); handshake(q);
+  const QH = q.host, QG = q.guest;
+  const run = (ms) => { for (let t = 0; t < ms; t += 250) { q.clock.advance(250); q.pump(); } };
+  QH.G.battleSpeed = 4; QG.G.battleSpeed = 4;
+  QH.G.myDeploy.push({ id: 'titan', lvl: 2, x: 300, y: 400 }, { id: 'titan', lvl: 1, x: 600, y: 400 }, { id: 'warden', lvl: 1, x: 450, y: 410 });
+  QG.G.myDeploy.push({ id: 'crawler', lvl: 1, x: 300, y: 400 }, { id: 'wasp', lvl: 1, x: 500, y: 400 });
+  const trail = []; let g2 = 0, rounds = 0;
+  while (QH.G.phase !== 'over' && g2++ < 600) {
+    for (const m of [QH, QG]) if (m.G.phase === 'plan' && !m.G.myReady) m.confirmReady();
+    run(500);
+    if (QH.G.phase === 'plan' && QH.G.round !== rounds) { rounds = QH.G.round; trail.push([QH.G.baseMe, QH.G.baseFoe]); }
+  }
+  const HG = QH.G, GG = QG.G;
+  if (HG.phase !== 'over' || GG.phase !== 'over' || !HG.matchEnded || !GG.matchEnded) fail.push(`C: la partida no terminó (${HG.phase}/${GG.phase})`);
+  if (HG.baseFoe !== 0 || HG.baseMe !== 1000) fail.push(`C: bases finales ${HG.baseMe}/${HG.baseFoe} (esperado 1000/0)`);
+  if (HG.baseMe !== GG.baseFoe || HG.baseFoe !== GG.baseMe) fail.push('C: host y guest ven bases distintas');
+  if (HG.round >= 12) fail.push('C: debía terminar por base destruida antes del límite de rondas (ronda ' + HG.round + ')');
+  for (let i = 1; i < trail.length; i++) if (trail[i][1] > trail[i - 1][1]) fail.push('C: la base del perdedor subió entre rondas');
+  // el replay graba el daño a las bases y la suma coincide con el estado final
+  const rec = QH.Rec.cur, dmgSum = rec.rounds.reduce((a, r) => [a[0] + r.bd[0], a[1] + r.bd[1]], [0, 0]);
+  if (Math.max(0, 1000 - dmgSum[1]) !== HG.baseFoe || Math.max(0, 1000 - dmgSum[0]) !== HG.baseMe) fail.push(`C: el replay no suma el mismo daño (${dmgSum} vs bases ${HG.baseMe}/${HG.baseFoe})`);
+  const clean = QH.sanitizeReplay(JSON.parse(JSON.stringify(rec)));
+  if (!clean || JSON.stringify(clean.rounds.map(r => r.bd)) !== JSON.stringify(rec.rounds.map(r => r.bd))) fail.push('C: sanitizeReplay alteró el daño a las bases');
+  // se puede pedir revancha tras destruir una base, pero no antes
+  if (!(QH.G.matchEnded)) fail.push('C: matchEnded sin marcar');
+  check('base: fórmula de daño, empate, límite de rondas, partida hasta destruir la base y replay con daño', fail.length === 0, fail.join('; '));
+}
+
+// (w) desbloqueo de unidades: ofertas deterministas verificables por ambos lados, flujo real y tramposos
+{
+  const { makePair, handshake } = require('./net');
+  const fail = [];
+  const mkPair = () => { const p = makePair({ raf: true }); handshake(p, { keepLocks: true }); p.host.G.battleSpeed = 4; p.guest.G.battleSpeed = 4; return p; };
+  const runFor = (p, ms) => { for (let t = 0; t < ms; t += 250) { p.clock.advance(250); p.pump(); } };
+  const starters = [...mkPair().host.STARTERS].sort().join();
+  const toRound2 = (p) => {                              // juega la ronda 1 con unidades iniciales
+    for (const m of [p.host, p.guest]) { m.G.myDeploy.push({ id: 'warden', lvl: 1, x: 300, y: 400 }, { id: 'crawler', lvl: 1, x: 500, y: 410 }); m.confirmReady(); }
+    p.pump(); let g = 0; while (!(p.host.G.phase === 'plan' && p.host.G.round === 2) && g++ < 400) runFor(p, 500);
+    runFor(p, 500);
+  };
+
+  // A. arranque: solo las iniciales, igual en ambas máquinas; ronda 1 sin oferta
+  { const p = mkPair(); const H = p.host, Gu = p.guest;
+    for (const [n, set] of [['host.unlocked', H.G.unlocked], ['host.foeUnlocked', H.G.foeUnlocked], ['guest.unlocked', Gu.G.unlocked], ['guest.foeUnlocked', Gu.G.foeUnlocked]]) if ([...set].sort().join() !== starters) fail.push(`A: ${n} no empieza con las iniciales`);
+    if (H.G.offer.length || Gu.G.offer.length) fail.push('A: la ronda 1 no debe tener oferta');
+    // B. la oferta: tamaño, distintas, bloqueadas, y el host calcula igual que el guest para el guest (y al revés)
+    for (let r = 2; r <= 6; r++) for (const side of ['host', 'guest']) {
+      const mine = side === 'host' ? H : Gu, other = side === 'host' ? Gu : H;
+      const a = mine.unlockOffer(side, r, mine.G.unlocked), b = other.unlockOffer(side, r, other.G.foeUnlocked);
+      if (JSON.stringify(a) !== JSON.stringify(b)) fail.push(`B: ronda ${r} ${side}: las dos máquinas calculan ofertas distintas`);
+      if (a.length !== 3 || new Set(a).size !== 3 || a.some(id => mine.G.unlocked.has(id) || !mine.UNITS[id])) fail.push(`B: oferta inválida ${JSON.stringify(a)}`);
+    }
+    const all = Object.keys(H.UNITS);
+    if (H.unlockOffer('host', 1, H.G.unlocked).length) fail.push('B: la ronda 1 debía dar [] ');
+    if (H.unlockOffer('host', 3, new Set(all.slice(0, all.length - 2))).length !== 2) fail.push('B: con 2 bloqueadas debía ofrecer 2');
+    if (H.unlockOffer('host', 3, new Set(all)).length !== 0) fail.push('B: sin bloqueadas no hay oferta');
+    if (JSON.stringify(H.unlockOffer('host', 2, H.G.unlocked)) === JSON.stringify(H.unlockOffer('guest', 2, H.G.unlocked)) && JSON.stringify(H.unlockOffer('host', 3, H.G.unlocked)) === JSON.stringify(H.unlockOffer('guest', 3, H.G.unlocked))) fail.push('B: host y guest reciben siempre la misma oferta (debería variar)'); }
+
+  // C. flujo real: ronda 2 con oferta; confirmar sin elegir avisa; elegir; desplegar lo desbloqueado; el rival lo valida
+  { const p = mkPair(); const H = p.host, Gu = p.guest; toRound2(p);
+    if (H.G.round !== 2 || H.G.offer.length !== 3 || Gu.G.offer.length !== 3) fail.push(`C: sin oferta en la ronda 2 (${H.G.offer.length}/${Gu.G.offer.length}, ronda ${H.G.round})`);
+    const hOffer = [...H.G.offer], gOffer = [...Gu.G.offer];
+    H.confirmReady(); if (H.G.myReady) fail.push('C: confirmó sin elegir desbloqueo a la primera');
+    Gu.pickUnlock(gOffer[2]); if (!Gu.G.unlocked.has(gOffer[2]) || Gu.G.unlockPicked !== gOffer[2]) fail.push('C: pickUnlock no desbloqueó');
+    if (Gu.pickUnlock(gOffer[0])) fail.push('C: se pudo elegir dos veces');
+    H.confirmReady();                                    // segunda confirmación: toma la primera de la oferta
+    if (H.G.unlockPicked !== hOffer[0]) fail.push('C: la elección automática debía ser la primera de la oferta');
+    H.G.myDeploy.length; Gu.G.myDeploy.push({ id: gOffer[2], lvl: 1, x: 700, y: 400 });   // despliega lo recién desbloqueado
+    Gu.confirmReady(); p.pump();
+    if (!H.G.foeReady || !H.G.foeUnlocked.has(gOffer[2])) fail.push('C: el host no aceptó el desbloqueo/despliegue del guest');
+    if (!Gu.G.foeUnlocked.has(hOffer[0])) fail.push('C: el guest no registró el desbloqueo del host');
+    let g = 0; while (H.G.phase === 'battle' && g++ < 400) runFor(p, 500);
+    if (p.log.host.length !== 2 || JSON.stringify(p.log.host) !== JSON.stringify(p.log.guest)) fail.push('C: simulaciones distintas tras desbloquear');
+    if (H.G.unlocked.size !== 5 || H.G.foeUnlocked.size !== 5 || Gu.G.unlocked.size !== 5) fail.push('C: tamaños de desbloqueo inesperados'); }
+
+  // D. tramposos: el rival rechaza lo que un cliente modificado enviaría
+  { const p = mkPair(); const H = p.host; toRound2(p);
+    const offer = H.unlockOffer('guest', 2, H.G.foeUnlocked), notOffered = Object.keys(H.UNITS).find(id => !H.G.foeUnlocked.has(id) && !offer.includes(id));
+    const base = { t: 'ready', round: 2, deploy: [{ id: 'warden', lvl: 1, x: 400, y: 400 }], tech: {} };
+    const tries = [['unlock fuera de la oferta', { ...base, unlock: notOffered }], ['sin unlock habiendo oferta', { ...base }], ['unlock de algo no ofrecido y numérico', { ...base, unlock: 7 }],
+      ['desplegar una bloqueada', { ...base, unlock: offer[0], deploy: [{ id: notOffered, lvl: 1, x: 400, y: 400 }] }]];
+    for (const [label, m] of tries) { const before = H.G.foeUnlocked.size; H.G.foeReady = false; H.onData(m); if (H.G.foeReady || H.G.foeUnlocked.size !== before) fail.push(`D: aceptó "${label}"`); }
+    H.G.foeReady = false; H.onData({ ...base, unlock: offer[1] });
+    if (!H.G.foeReady || !H.G.foeUnlocked.has(offer[1])) fail.push('D: no aceptó un desbloqueo legítimo');
+    const q = mkPair(); q.host.onData({ t: 'ready', round: 1, deploy: [{ id: 'warden', lvl: 1, x: 400, y: 400 }], tech: {}, unlock: 'titan' });
+    if (q.host.G.foeReady) fail.push('D: aceptó un desbloqueo en la ronda 1 (no hay oferta)');
+    const w = mkPair(); w.host.onData({ t: 'ready', round: 1, deploy: [{ id: 'titan', lvl: 1, x: 400, y: 400 }], tech: {}, unlock: null });
+    if (w.host.G.foeReady) fail.push('D: aceptó desplegar un Titan sin tenerlo desbloqueado');
+    const x = mkPair(); x.host.onData({ t: 'ready', round: 1, deploy: [{ id: 'warden', lvl: 1, x: 400, y: 400 }], tech: { titan: true, warden: true }, unlock: null });
+    if (!x.host.G.foeReady || x.host.G.foeTech.titan || !x.host.G.foeTech.warden) fail.push('D: debía descartar la tecnología de una unidad no desbloqueada y conservar la legítima'); }
+
+  // E. al vencer el tiempo se elige la primera oferta y todo sigue
+  { const p = mkPair(); const H = p.host, Gu = p.guest; toRound2(p);
+    const ho = H.G.offer[0], go = Gu.G.offer[0];
+    runFor(p, 70000);
+    if (!H.G.foeUnlocked.has(go) || !Gu.G.foeUnlocked.has(ho)) fail.push('E: el temporizador no eligió la primera oferta en alguna máquina');
+    if (p.log.host.length < 2 || JSON.stringify(p.log.host) !== JSON.stringify(p.log.guest)) fail.push('E: simulaciones distintas tras la elección automática'); }
+
+  // F. una partida nueva (revancha) vuelve a las iniciales
+  { const p = mkPair(); const H = p.host; H.G.unlocked = new Set(Object.keys(H.UNITS)); H.startMatch();
+    if ([...H.G.unlocked].sort().join() !== starters || H.G.offer.length) fail.push('F: startMatch no reinició los desbloqueos'); }
+  check('desbloqueos: ofertas idénticas en ambas máquinas, flujo, tramposos y elección automática', fail.length === 0, fail.slice(0, 4).join('; '));
 }
 
 // --report: tabla de winrates entre todos los tipos y unidades

@@ -4,7 +4,8 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 
-const HTML_PATH = path.join(__dirname, '..', 'index.html');
+// IRONSIEGE_HTML permite apuntar a una copia congelada del juego (p. ej. para que una búsqueda larga de balance no vea ediciones en curso)
+const HTML_PATH = process.env.IRONSIEGE_HTML || path.join(__dirname, '..', 'index.html');
 
 function extractScript(html) {
   const blocks = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m => m[1]);

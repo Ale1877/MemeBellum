@@ -13,6 +13,11 @@ Se publica como sitio estático (Cloudflare Pages). Ver `README.md` para la arqu
   `node tests/run.js --report` y con una semilla distinta a la usada para ajustar.
 - **Sin servidor propio ni infraestructura paga.** Todo entrante (red, enlaces de replay) se sanea.
 - Reglas estilo Mechabellum: **el ejército completo se restaura a pleno HP cada ronda** (destruidas y supervivientes; `PERSIST_DAMAGE=false`).
+- **Vida de base**: gana quien destruye la base rival (1000 HP); el daño sale de `simulate()` (`baseDmg`, de los sobrevivientes del ganador). Cambiarlo ⇒ `SIM_VERSION`.
+- **Desbloqueos**: 4 unidades iniciales y 1 de 3 por ronda desde la 2. Las ofertas son deterministas (`unlockOffer`, semilla compartida) y el rival
+  se valida con ellas en `applyFoeReady`: desbloqueo fuera de la oferta o unidad no desbloqueada ⇒ rechazo. Los tests desbloquean todo por defecto
+  (`handshake`/`makeNetPair`, salvo `keepLocks`). Agregar una unidad: entrada en `UNITS` (con `fx` de una familia existente), caso de tecnología en `expand`, balancearla
+  (`tools/balance-search.js` con `FOCUS=id`) y subir `SIM_VERSION`.
 - Mantener: niveles por fusión, tecnologías por unidad, intel del rival, velocidad 0.5×–4×, modal de stats.
 - Mantener el proyecto como **un solo `index.html`** salvo acuerdo explícito.
 

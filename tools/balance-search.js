@@ -5,8 +5,11 @@
 // y, si cambia las reglas, subí SIM_VERSION y corré: node tests/run.js --update-fingerprint
 const { fork } = require('child_process');
 const path = require('path');
-const IDS = ['crawler','marauder','warden','longbow','vulcan','titan'];
-const KNOBS = IDS.flatMap(id => ['hp','dmg'].map(k => id + '.' + k)).concat(['vulcan.cost','titan.cost','crawler.cost','marauder.cost','warden.cost','longbow.cost','lvl2','lvl3']);
+// Todas las unidades del juego; FOCUS=id1,id2 limita QUÉ unidades se mueven (y cuyas filas pesan en la pérdida):
+// así se afinan unidades nuevas sin tocar las ya balanceadas. Sin FOCUS se mueven todas.
+const IDS = Object.keys(require('../tests/load').loadGame(['UNITS']).api.UNITS);
+const FOCUS = process.env.FOCUS ? process.env.FOCUS.split(',') : IDS;
+const KNOBS = FOCUS.flatMap(id => ['hp','dmg','cost'].map(k => id + '.' + k)).concat(process.env.FOCUS ? [] : ['lvl2','lvl3']);
 
 function applyVec(api, vec) {
   for (const id of IDS) { const u = api.UNITS[id];
@@ -26,7 +29,8 @@ function evaluate(vec, n, seedBase, lvl) {
   const ids = IDS; const M = {};
   const win = (a, c) => { const w = B.unitDuel(a, c, 1000, n); return w; };
   for (const a of ids) M[a] = {};
-  for (let i = 0; i < ids.length; i++) for (let j = i+1; j < ids.length; j++) { const w = win(ids[i], ids[j]); M[ids[i]][ids[j]] = w; M[ids[j]][ids[i]] = 1-w; }
+  const fset = new Set(FOCUS);
+  for (let i = 0; i < ids.length; i++) for (let j = i+1; j < ids.length; j++) { if (!fset.has(ids[i]) && !fset.has(ids[j])) continue; const w = win(ids[i], ids[j]); M[ids[i]][ids[j]] = w; M[ids[j]][ids[i]] = 1-w; }   // solo pares con una unidad en foco
   const T = id => B.api.UNITS[id].type;
   const range = (a, c) => { const ta=T(a), tc=T(c);
     const cnt = (x,y)=> (x==='swarm'&&y==='heavy')||(x==='heavy'&&y==='ranged')||(x==='ranged'&&y==='swarm');
@@ -34,9 +38,9 @@ function evaluate(vec, n, seedBase, lvl) {
     if (ta==='assault'&&tc==='heavy') return [0.20,0.60]; if (tc==='assault'&&ta==='heavy') return [0.40,0.80];
     if (ta==='assault') return [0.40,0.80]; if (tc==='assault') return [0.20,0.60];
     return [0.25,0.75]; };
-  for (const a of ids) { let s = 0; for (const c of ids) if (a !== c) { const [lo,hi] = range(a,c); const w = M[a][c]; loss += 1.5*(cl(lo-w)**2 + cl(w-hi)**2); s += w; } diag.avg[a] = s/(ids.length-1); loss += 2*(cl(0.40-diag.avg[a])**2 + cl(diag.avg[a]-0.60)**2); }
+  for (const a of FOCUS) { let s = 0; for (const c of ids) if (a !== c) { const [lo,hi] = range(a,c); const w = M[a][c]; loss += 1.5*(cl(lo-w)**2 + cl(w-hi)**2); s += w; } diag.avg[a] = s/(ids.length-1); loss += 2*(cl(0.40-diag.avg[a])**2 + cl(diag.avg[a]-0.60)**2); }
   diag.fus = {};
-  for (const id of ids) { const r = B.fusionDuel(id, n); diag.fus[id] = r; loss += 1.5*(cl(0.40-r.L2)**2 + cl(r.L2-0.65)**2) + 1.5*(cl(0.40-r.L3)**2 + cl(r.L3-0.70)**2); }
+  for (const id of FOCUS) { const r = B.fusionDuel(id, n); diag.fus[id] = r; loss += 1.5*(cl(0.40-r.L2)**2 + cl(r.L2-0.65)**2) + 1.5*(cl(0.40-r.L3)**2 + cl(r.L3-0.70)**2); }
   diag.M = M;
   let reg = 0; for (const k of KNOBS) reg += Math.log(vec[k]||1)**2; loss += 0.8*reg;
   return { loss, diag };

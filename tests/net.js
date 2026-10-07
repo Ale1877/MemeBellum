@@ -2,7 +2,7 @@
 // conectadas por una cola de mensajes en memoria (JSON, como WebRTC) y un reloj falso compartido.
 const { loadGame } = require('./load');
 
-const NAMES = ['simulate','UNITS','G','makeRNG','onData','send','startMatch','tryResolve','newRound','finishRound','playback','confirmReady','sanitizeDeploy','sanitizeTech','onFoeReady','connectionLost','leaveToLobby','onIncoming','onFieldTap','undoLast','P','FXQ','setFx','drawBattle','HAS_RAF','spriteFor','spriteDir','AUD','sfx','audioInit','setSnd','buildSummary','renderSummary','expand','startPlanTimer','tickPlanTimer','requestRematch','Rec','replaysLoad','replaySave','sanitizeReplay','replayEncode','replayDecode','replayOpen','replayClose','replayToggle','replaySeek','replayLoadRound','RP','SIM_VERSION','NET_VERSION','replayLink','replayImport','REPLAY_MAX','PERSIST_DAMAGE'];
+const NAMES = ['simulate','UNITS','G','makeRNG','onData','send','startMatch','tryResolve','newRound','finishRound','playback','confirmReady','sanitizeDeploy','sanitizeTech','onFoeReady','connectionLost','leaveToLobby','onIncoming','onFieldTap','undoLast','P','FXQ','setFx','drawBattle','HAS_RAF','spriteFor','spriteDir','AUD','sfx','audioInit','setSnd','buildSummary','renderSummary','expand','startPlanTimer','tickPlanTimer','requestRematch','Rec','replaysLoad','replaySave','sanitizeReplay','replayEncode','replayDecode','replayOpen','replayClose','replayToggle','replaySeek','replayLoadRound','RP','SIM_VERSION','NET_VERSION','replayLink','replayImport','REPLAY_MAX','PERSIST_DAMAGE','matchOutcome','UNITS','unlockOffer','pickUnlock','STARTERS','OFFER_SIZE'];
 
 function makeClock() {
   let now = 0, id = 1; const tm = new Map();
@@ -62,16 +62,19 @@ function makePair(opts = {}) {
 }
 
 // Hace el handshake real: cada lado manda 'hello' al abrir la conexión.
-function handshake(p) {
+// Los tests despliegan cualquier unidad: salvo que se pida lo contrario (keepLocks) se desbloquea todo en ambas máquinas.
+function unlockAll(m) { const all = Object.keys(m.UNITS); m.G.unlocked = new Set(all); m.G.foeUnlocked = new Set(all); }
+function handshake(p, o = {}) {
   const v = { sim: p.host.SIM_VERSION, net: p.host.NET_VERSION };       // como wireConn: el hello lleva las versiones
   p.host.send({ t: 'hello', name: p.host.G.name, ...v });
   p.guest.send({ t: 'hello', name: p.guest.G.name, ...v });
   p.pump();
+  if (!o.keepLocks) { unlockAll(p.host); unlockAll(p.guest); }
 }
 
 // Dos máquinas que usan hostCreate()/joinRoom() reales sobre la red PeerJS falsa.
 const NET_NAMES = NAMES.concat(['hostCreate','joinRoom','beginReconnect','giveUpReconnect','mmStart','MM','NET_VERSION']);
-function makeNetPair() {
+function makeNetPair(opts = {}) {
   const { makeNet } = require('./fakepeer');
   const clock = makeClock(); const net = makeNet(clock);
   const sb = { setTimeout: clock.setTimeout, clearTimeout: clock.clearTimeout, setInterval: clock.setInterval, clearInterval: clock.clearInterval, Peer: net.Peer, navigator: {} };
@@ -85,6 +88,7 @@ function makeNetPair() {
   el(hl, 'playerName').value = 'H'; hl.api.hostCreate(); clock.advance(10);
   const code = el(hl, 'roomCode').textContent;
   el(gl, 'playerName').value = 'G'; el(gl, 'joinCode').value = code; gl.api.joinRoom(); clock.advance(100);
+  if (!opts.keepLocks) { unlockAll(hl.api); unlockAll(gl.api); }
   return { host: hl.api, guest: gl.api, hl, gl, clock, net, log, code, el };
 }
 // N máquinas independientes sobre la MISMA red PeerJS falsa y el mismo reloj (para matchmaking).
@@ -103,4 +107,4 @@ function makeCrowd(n, opts = {}) {
   for (let i = 0; i < n; i++) add('P' + i);
   return { ms, clock, net, add, run: (ms_) => clock.advance(ms_) };
 }
-module.exports = { makePair, handshake, makeNetPair, makeCrowd };
+module.exports = { makePair, handshake, makeNetPair, makeCrowd, unlockAll };

@@ -6,15 +6,31 @@ sitio estático (Cloudflare Pages).
 
 ## Cómo se juega
 
-Partida al mejor de 5 (gana quien llega a 3 rondas). Cada ronda:
+Cada jugador tiene una **base con 1000 puntos de vida**; quien llega a 0 pierde (como en Mechabellum). Cada ronda:
 
 1. **Planificás** (90 s la primera, 60 s las siguientes): desplegás mechas con créditos, los **movés**, los **fusionás**
    (dos iguales del mismo nivel → +1 nivel) o investigás **tecnologías** por unidad.
-2. Confirmás **LISTO**. Cuando los dos confirman, el combate se simula y se reproduce (velocidad 0,5×–4×).
-3. **Tu ejército se restaura completo** (como en Mechabellum): todas tus unidades reaparecen en la ronda siguiente, en su posición y
-   **a pleno HP**, hayan sido destruidas o sobrevivido. Lo que decide el rumbo de la partida es qué desplegás, no el desgaste. Ves además
-   el despliegue y las techs del rival de la ronda anterior (intel). (`PERSIST_DAMAGE` en el código; con `true` los supervivientes
-   conservarían el daño, pero no es la regla actual.)
+2. **Desbloqueás una unidad nueva** (desde la ronda 2): empezás con solo 4 (Crawler, Marauder, Warden y Longbow) y cada ronda elegís **1 de 3**
+   unidades bloqueadas para sumarla gratis. Las ofertas salen de la semilla compartida de la partida, así que ambos clientes pueden
+   verificar que el rival solo desplegó unidades que desbloqueó de verdad. Si no elegís, al confirmar o al acabarse el tiempo se toma la primera.
+3. Confirmás **LISTO**. Cuando los dos confirman, el combate se simula y se reproduce (velocidad 0,5×–4×).
+4. **Daño a la base**: el perdedor de la ronda recibe `20 + 30 % del valor de las unidades que le quedaron vivas al ganador` (valor = costo por
+   miembro × 2^(nivel−1)). Un empate no hace daño. Si pasan 12 rondas gana quien tenga más vida de base.
+5. **Tu ejército se restaura completo** (como en Mechabellum): todas tus unidades reaparecen en la ronda siguiente, en su posición y
+   **a pleno HP**, hayan sido destruidas o sobrevivido. Ves además el despliegue y las techs del rival de la ronda anterior (intel).
+   (`PERSIST_DAMAGE` en el código; con `true` los supervivientes conservarían el daño, pero no es la regla actual.)
+
+### Unidades (12)
+Triángulo de contras: **enjambre > pesado > rango > enjambre**; el asalto es generalista (`TYPE_ADV`).
+
+| Tipo | Unidades |
+|---|---|
+| Enjambre | Crawler*, Wasp, Hound |
+| Asalto | Marauder*, Lancer |
+| Pesado | Warden*, Titan, Bulwark |
+| Rango | Longbow*, Vulcan, Mortar, Arclight |
+
+\* iniciales. Cada una tiene además una **tecnología** propia que se compra por separado.
 
 ### Modos
 - **Buscar partida rápida**: cola abierta sin servidor propio (ver *Matchmaking* abajo).
@@ -30,7 +46,7 @@ El `<script>` está dividido en secciones con cabeceras `/* ---------- ... -----
 | RNG, Unit catalog, Game state | `makeRNG` (mulberry32), `UNITS`, `TYPE_ADV`, `lvlMult`, estado `G` |
 | Networking, Connection health, Reconnection | PeerJS, latidos, reconexión con token, `startHosting`/`startJoin` |
 | Matchmaking without a server | buzones con ID fijo (`ironsiege-v1-q-N`) |
-| Match flow, Rematch, Shop, Field/deploy | flujo de ronda, tienda, despliegue/mover/fusionar, temporizador |
+| Match flow, Rematch, Shop, Field/deploy | flujo de ronda, desbloqueos, tienda, despliegue/mover/fusionar, temporizador, vida de base |
 | **Simulation** | `expand` + `simulate`: **determinista**, único lugar donde se decide el combate |
 | Renderer & effects, Audio, Playback | canvas con sprites cacheados, partículas, Web Audio sintetizado |
 | Battle summary, Replays | estadísticas de ronda, grabación/códec/visor |

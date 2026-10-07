@@ -222,6 +222,24 @@
   body.replaying .topbar #btnReady,body.replaying #btnUndo,body.replaying #btnRematch,body.replaying #btnLobby,body.replaying #btnShareReplay,
   body.replaying .stat.cred{display:none !important}
   @media (max-width:600px){ .replaybar #rpSeek{order:9;flex-basis:100%} .rp-row{flex-wrap:wrap} }
+
+  /* ---------- Unit unlocks ---------- */
+  .unlock-info{font-size:11px;color:var(--ink-dim);letter-spacing:1px;margin-top:12px}
+  .offer{margin-top:12px;border-color:var(--amber);animation:fadeIn .35s ease-out}
+  .offer h3{font-family:var(--disp);font-size:12px;letter-spacing:2px;color:var(--amber);margin:0 0 4px}
+  .offer .hint{font-size:11px;color:var(--ink-dim);margin:0 0 10px}
+  .offer-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+  .offer-card{background:var(--panel2);border:1px solid var(--line);padding:10px;position:relative}
+  .offer-card .ic{font-size:22px}
+  .offer-card .nm{font-family:var(--disp);font-weight:600;font-size:13px;letter-spacing:1px;margin-top:2px}
+  .offer-card .ty{font-size:10px;color:var(--amber);letter-spacing:1px}
+  .offer-card .st{font-size:11px;color:var(--ink-dim);margin-top:4px;line-height:1.5}
+  .offer-card .role{font-size:11px;color:var(--ink-dim);margin-top:4px;line-height:1.4}
+  .offer-card button{margin-top:8px}
+  .offer-card .info-btn{position:absolute;top:6px;right:6px;width:auto;margin:0;border:1px solid var(--line);color:var(--ink-dim);font-size:11px;padding:1px 6px;background:transparent;font-family:var(--mono)}
+  .unit-card.locked{opacity:.38;filter:grayscale(.85);cursor:not-allowed}
+  .unit-card .lock{display:none;position:absolute;left:42px;top:10px;font-size:13px}
+  .unit-card.locked .lock{display:block}
   /* ---------- Planning timer ---------- */
   .timer{display:flex;align-items:center;gap:10px;margin:-2px 0 10px;font-size:12px;color:var(--ink-dim);letter-spacing:1px;min-height:16px}
   .timer .track{flex:1;height:3px;background:var(--line);overflow:hidden}
@@ -332,8 +350,8 @@
       <div class="stat"><span class="lbl">RONDA</span><b id="hRound">1</b></div>
       <div class="stat cred"><span class="lbl">CRÉDITOS</span><b id="hGold">0</b></div>
       <div class="stat cred"><span class="lbl">INGRESO/RONDA</span><b id="hInc">0</b></div>
-      <div class="stat"><span class="lbl" id="lblWinMe">MIS VICTORIAS</span><b id="hWinMe">0</b></div>
-      <div class="stat"><span class="lbl" id="lblWinFoe">RIVAL</span><b id="hWinFoe" style="color:var(--red)">0</b></div>
+      <div class="stat"><span class="lbl" id="lblWinMe">MI BASE</span><b id="hWinMe">0</b></div>
+      <div class="stat"><span class="lbl" id="lblWinFoe">BASE RIVAL</span><b id="hWinFoe" style="color:var(--red)">0</b></div>
     </div>
     <div class="vs-tag"><span class="me" id="tagMe">YO</span> VS <span class="foe" id="tagFoe">RIVAL</span></div>
   </div>
@@ -378,6 +396,12 @@
     <button class="mode" data-mode="tech">TECNOLOGÍA</button>
   </div>
   <div class="selhint" id="selHint">Elegí una unidad de la tienda para desplegar.</div>
+  <div class="card offer" id="offerBox" hidden>
+    <h3>NUEVA UNIDAD · ELEGÍ 1 PARA DESBLOQUEAR</h3>
+    <p class="hint">Es gratis y la podés desplegar desde ya. Si no elegís, se desbloquea la primera al confirmar o al acabarse el tiempo.</p>
+    <div class="offer-cards" id="offerCards"></div>
+  </div>
+  <div class="unlock-info" id="unlockInfo"></div>
   <div class="shop" id="shop"></div>
 
   <div class="bar">
@@ -441,7 +465,21 @@ const UNITS = {
     tech:{ id:'napalm', name:'Napalm', cost:150, desc:'radio de salpicadura +80%' } },
   titan:{   id:'titan',   name:'Titan',   ic:'🏔', cost:380, hp:1900,dmg:120,rng:120, spd:0.9, cd:28, type:'heavy',   count:1, splash:40, role:'Coloso. Pozo de HP y pegada brutal.',
     tech:{ id:'siege', name:'Asedio', cost:200, desc:'+40% daño, ignora ventajas de tipo' } },
+  wasp:{    id:'wasp',    name:'Wasp',    ic:'🐝', cost:90,  hp:60,  dmg:18, rng:85,  spd:3.4, cd:7, type:'swarm',   count:3, fx:'crawler', role:'Enjambre veloz con algo de alcance. Hostiga a los de rango.',
+    tech:{ id:'sting', name:'Aguijón', cost:60, desc:'+40% daño' } },
+  hound:{   id:'hound',   name:'Hound',   ic:'🐺', cost:115, hp:140, dmg:24, rng:62,  spd:2.8, cd:9, type:'swarm',   count:2, fx:'crawler', sz:1, role:'Pareja de cazadores rápidos. Rompen blancos pesados.',
+    tech:{ id:'fangs', name:'Colmillos', cost:80, desc:'+60% cadencia de disparo' } },
+  lancer:{  id:'lancer',  name:'Lancer',  ic:'🗡', cost:130, hp:441, dmg:57, rng:130, spd:1.4, cd:18, type:'assault', count:1, fx:'marauder', role:'Asalto de media distancia con buena pegada.',
+    tech:{ id:'thermal', name:'Lanza térmica', cost:100, desc:'+30% daño y +30 alcance' } },
+  bulwark:{ id:'bulwark', name:'Bulwark', ic:'🧱', cost:240, hp:1692,dmg:41, rng:60,  spd:0.8, cd:14, type:'heavy',   count:1, fx:'warden', sz:2, role:'Muralla. Enorme vida pero poco daño.',
+    tech:{ id:'reactive', name:'Blindaje reactivo', cost:170, desc:'+40% HP máximo' } },
+  mortar:{  id:'mortar',  name:'Mortar',  ic:'💣', cost:245, hp:132, dmg:120,rng:340, spd:0.7, cd:46, type:'ranged',  count:1, splash:55, fx:'longbow', role:'Artillería de largo alcance. Castiga posiciones agrupadas.',
+    tech:{ id:'extra', name:'Carga extra', cost:170, desc:'+60 alcance y +20% daño' } },
+  arclight:{id:'arclight',name:'Arclight',ic:'⚡', cost:195, hp:340, dmg:39, rng:220, spd:1.0, cd:12, type:'ranged',  count:1, splash:20, fx:'vulcan', role:'Rayo sostenido a media distancia.',
+    tech:{ id:'overcharge', name:'Sobrecarga', cost:140, desc:'+50% cadencia de disparo' } },
 };
+// effects/audio class of a unit (new units reuse the look & sound of an existing weapon family)
+const fxClass=id=>(UNITS[id]&&UNITS[id].fx)||id;
 /* Level multipliers: each level scales hp & dmg. Merge 2 same-id same-level -> +1 level. */
 function lvlMult(l){ return l<=1 ? 1 : l===2 ? 1.62 : 2.76 + (l-3)*1.14; }  // L1=1x, L2=1.62x, L3=2.76x, L4=3.9x...
 const TYPE_ADV = { // attacker type -> {defender type: multiplier}
@@ -453,12 +491,19 @@ const TYPE_ADV = { // attacker type -> {defender type: multiplier}
 
 /* ---------- Game state ---------- */
 const INCOME_START=200;
+const BASE_HP=1000, MAX_ROUNDS=12;
+// Unit unlocks: you start with a few units; from round 2 you pick ONE of OFFER_SIZE locked units each round.
+// Offers are derived from the shared match seed (+ side + round + what that side already unlocked), so BOTH machines
+// can compute -- and therefore verify -- what the rival was allowed to unlock and deploy.
+const STARTERS=['crawler','marauder','warden','longbow'], OFFER_SIZE=3;   // each player has a base; at MAX_ROUNDS the player with more base HP wins
 const PERSIST_DAMAGE=false;  // Mechabellum rules: the whole army is restored to full HP every round. (true: survivors would keep their damage)
 const G = {
   name:'', foeName:'RIVAL',
   isHost:false, conn:null, peer:null,
   round:1, gold:0, income:INCOME_START,
-  winsMe:0, winsFoe:0,
+  winsMe:0, winsFoe:0,    // rounds won (statistics / replays)
+  unlocked:new Set(STARTERS), foeUnlocked:new Set(STARTERS), offer:[], unlockPicked:null,   // unit unlocks (me / rival) and this round's offer
+  baseMe:BASE_HP, baseFoe:BASE_HP, matchEnded:false,   // base HP: the match ends when one reaches 0
   myDeploy:[],          // units I field: {id,x,y,lvl}
   myPending:[],         // actions this round (for undo): {kind,...}
   myTech:{},            // {unitId:true} techs I've researched
@@ -931,13 +976,27 @@ function onFoeReady(m){
   }
   applyFoeReady(m);
 }
+// the rival sent something only a modified client would: say so and let the player leave (the match cannot continue)
+function foeViolation(msg){
+  toast(msg); logLine('⚠ '+esc(msg)+'. Podés volver al lobby.','');
+  $('phaseNote').textContent=msg+'.'; $('btnLobby').style.display='';
+}
 function applyFoeReady(m){
   if(G.foeReady) return;                          // already have this round's deploy
   const deploy=sanitizeDeploy(m.deploy);
-  if(!deploy || (!deploy.length && m.deploy.length)){ toast('El rival envió un despliegue inválido'); return; }   // [] is valid (timeout with no army)
+  if(!deploy || (!deploy.length && m.deploy.length)){ foeViolation('El rival envió un despliegue inválido'); return; }   // [] is valid (timeout with no army)
+  // unlock check: the rival may only have taken one of the units it was OFFERED this round (we can compute that offer),
+  // and may only deploy units it has unlocked. Anything else is a modified client.
+  const foeSide=G.isHost?'guest':'host', offer=unlockOffer(foeSide,m.round,G.foeUnlocked), un=m.unlock;
+  if(offer.length ? (typeof un!=='string'||!offer.includes(un)) : (un!==null&&un!==undefined)){ foeViolation('El rival envió un desbloqueo inválido'); return; }
+  const have=new Set(G.foeUnlocked); if(un) have.add(un);
+  if(deploy.some(d=>!have.has(d.id))){ foeViolation('El rival desplegó una unidad que no tiene desbloqueada'); return; }
+  G.foeUnlocked=have;
   G.foeReady=true;
   G.foeDeploy=deploy;
-  G.foeTech=sanitizeTech(m.tech);
+  const ft=sanitizeTech(m.tech); for(const k in ft) if(!have.has(k)) delete ft[k];
+  G.foeTech=ft;
+  renderOffer();
   $('phaseNote').textContent = G.myReady ? 'Resolviendo combate…' : 'Tu rival ya está listo. Esperándote.';
   tryResolve();
 }
@@ -947,7 +1006,8 @@ function startMatch(){
   // combined deterministic seed, identical on both machines: the parts MUST be
   // combined in canonical (host, guest) order, never in (me, foe) order.
   G.seed = combineSeed(G.isHost?G.mySeedPart:G.foeSeedPart, G.isHost?G.foeSeedPart:G.mySeedPart);
-  G.round=1; G.income=INCOME_START; G.gold=G.income; G.winsMe=0; G.winsFoe=0;
+  G.unlocked=new Set(STARTERS); G.foeUnlocked=new Set(STARTERS); G.offer=[]; G.unlockPicked=null;
+  G.round=1; G.income=INCOME_START; G.gold=G.income; G.winsMe=0; G.winsFoe=0; G.baseMe=BASE_HP; G.baseFoe=BASE_HP; G.matchEnded=false;
   G.myDeploy=[]; G.myPending=[]; G.myTech={}; G.foeTech={}; G.pendingReady=null; G.sentReady=null; G.foeAway=false; endReconnect();
   recStart();
   G.foeLastDeploy=null; G.foeLastTech={}; G.rematchMe=false; G.foeRematch=false; G.mode='place';   // a fresh match must not inherit intel/rematch state
@@ -968,7 +1028,7 @@ function startMatch(){
 /* ---------- Rematch ---------- */
 // Both players must ask; then the host sends fresh seed material and both machines restart the match
 // over the same connection (no lobby, no new room code).
-function canRematch(){ return G.phase==='over' && !G.reconnecting && G.conn && G.conn.open && (G.winsMe>=3||G.winsFoe>=3); }
+function canRematch(){ return G.phase==='over' && !G.reconnecting && G.conn && G.conn.open && G.matchEnded; }
 function updateRematchBtn(){
   const b=$('btnRematch'); if(!b) return;
   b.hidden=!canRematch();
@@ -985,16 +1045,57 @@ function maybeStartRematch(){
   send({t:'rseed',seed:G.mySeedPart});
 }
 
+// deterministic offer for `side` ('host'|'guest') in `round`, given the units that side already has: up to OFFER_SIZE
+// distinct locked units. Uses its OWN rng (never the simulation's); Object.keys order is stable (insertion order).
+function unlockOffer(side,round,unlockedSet){
+  if(round<2) return [];
+  const a=Object.keys(UNITS).filter(id=>!unlockedSet.has(id));
+  if(!a.length) return [];
+  const rng=makeRNG((G.seed ^ Math.imul(side==='host'?0x9E3779B1:0x85EBCA6B,round) ^ Math.imul(round,7919))>>>0);
+  const n=Math.min(OFFER_SIZE,a.length);
+  for(let i=0;i<n;i++){ const j=i+Math.floor(rng()*(a.length-i)); const t=a[i]; a[i]=a[j]; a[j]=t; }
+  return a.slice(0,n);
+}
+function mySide(){ return G.isHost?'host':'guest'; }
+function pickUnlock(id){
+  if(G.phase!=='plan'||G.myReady||G.unlockPicked||!G.offer.includes(id)) return false;
+  G.unlocked.add(id); G.unlockPicked=id;
+  toast(`${UNITS[id].name} desbloqueada`); sfx('merge');
+  renderOffer(); renderShop(); updateHUD();
+  return true;
+}
+function renderOffer(){
+  const box=$('offerBox'), info=$('unlockInfo'); if(!box) return;
+  const total=Object.keys(UNITS).length;
+  if(info) info.textContent=`UNIDADES DESBLOQUEADAS ${G.unlocked.size}/${total} · RIVAL ${G.foeUnlocked.size}/${total}`;
+  const pending=G.offer.length>0 && !G.unlockPicked && G.phase==='plan';
+  box.hidden=!pending;
+  const cards=$('offerCards'); cards.textContent='';
+  if(!pending) return;
+  for(const id of G.offer){
+    const u=UNITS[id], c=document.createElement('div'); c.className='offer-card';
+    const el=(tag,cls,txt)=>{ const e=document.createElement(tag); if(cls) e.className=cls; if(txt!=null) e.textContent=txt; return e; };
+    const ib=el('button','info-btn','ℹ'); ib.onclick=()=>openUnitModal(id); c.appendChild(ib);
+    c.appendChild(el('div','ic',u.ic)); c.appendChild(el('div','nm',u.name));
+    c.appendChild(el('div','ty',TYPE_LABEL[u.type]+(u.count>1?` · ×${u.count}`:'')));
+    c.appendChild(el('div','st',`◈ ${u.cost} · ❤ ${u.hp} · ⚔ ${u.dmg} · alcance ${u.rng}`));
+    c.appendChild(el('div','role',u.role));
+    const b=el('button','','DESBLOQUEAR'); b.onclick=()=>pickUnlock(id); c.appendChild(b);
+    cards.appendChild(c);
+  }
+}
 function newRound(first){
   if(!first){ G.gold += G.income; }
   G.myPending=[];
   G.myReady=false; G.foeReady=false; G.foeDeploy=null; G.foeTech={};
   G.selected=null; G.mode='place'; mergeFirst=null; moveSel=null;
   G.phase='plan';
+  G.unlockPicked=null; G.offer=unlockOffer(mySide(),G.round,G.unlocked);   // this round's unlock offer (none in round 1)
   startPlanTimer();
   document.querySelectorAll('.modebar .mode').forEach(b=>b.classList.toggle('active',b.dataset.mode==='place'));
   G._bt=null; pClear(); field.style.transform='';
   updateHUD();
+  renderOffer();
   renderShop();
   drawField(null);
   $('btnReady').disabled=false;
@@ -1012,7 +1113,7 @@ function setStat(id,v){
   if(hudLast[id]!==v){ const first=hudLast[id]===undefined; hudLast[id]=v; el.textContent=v; if(!first){ el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump'); } }
 }
 function updateHUD(){
-  setStat('hRound',G.round); setStat('hGold',G.gold); setStat('hInc',G.income); setStat('hWinMe',G.winsMe); setStat('hWinFoe',G.winsFoe);
+  setStat('hRound',G.round); setStat('hGold',G.gold); setStat('hInc',G.income); setStat('hWinMe',G.baseMe); setStat('hWinFoe',G.baseFoe);
   $('btnReady').classList.toggle('pulse', G.phase==='plan' && !G.myReady && G.myDeploy.length>0);   // nudge: you can confirm now
 }
 function showBanner(text,cls,sub){
@@ -1035,7 +1136,8 @@ function buildShop(){
       <div class="nm">${u.name}</div>
       <div class="cost" data-cost>◈ ${u.cost}${u.count>1?` ×${u.count}`:''}</div>
       <div class="role">${u.role}</div>
-      <div class="tech-tag" data-tech>⚙ ${u.tech.name} · ${u.tech.cost}◈</div>`;
+      <div class="tech-tag" data-tech>⚙ ${u.tech.name} · ${u.tech.cost}◈</div>
+      <div class="lock" title="Bloqueada: aparece en las ofertas de desbloqueo">🔒</div>`;
     c.querySelector('[data-info]').onclick=(ev)=>{ ev.stopPropagation(); openUnitModal(k); };
     c.onclick=()=>clickShop(k);
     shop.appendChild(c);
@@ -1045,6 +1147,7 @@ function renderShop(){
   document.querySelectorAll('.unit-card').forEach(c=>{
     const k=c.dataset.id, u=UNITS[k];
     const sel = G.selected===k;
+    const locked=!G.unlocked.has(k); c.classList.toggle('locked',locked);
     c.classList.toggle('sel', sel);
     c.style.borderColor = sel ? 'var(--phos)' : '';
     const cntEl=c.querySelector('[data-cnt]');
@@ -1059,12 +1162,14 @@ function renderShop(){
     let can = G.gold>=cost;
     if(G.mode==='tech' && hasTech) can=false;
     if(G.mode==='move') can=false;
+    if(locked) can=false;
     c.classList.toggle('cant',!can);
   });
 }
 function clickShop(k){
   const u=UNITS[k];
   if(G.phase!=='plan' || G.myReady) return;
+  if(!G.unlocked.has(k)){ toast(`${u.name} está bloqueada: aparece en las ofertas de desbloqueo`); return; }
   if(G.mode==='move'){ toast('En MOVER tocá una unidad en el campo'); return; }
   if(G.mode==='tech'){
     if(G.myTech[k]){ toast('Ya la tenés'); return; }
@@ -1294,7 +1399,7 @@ function blitBackground(){ if(bgCanvas) ctx.drawImage(bgCanvas,0,0,V.w,V.h); els
 
 /* --- sprites (cached offscreen; dpr-aware) --- */
 const spriteCache=new Map(), badgeCache=new Map(), glowCache=new Map();
-function unitR(def,lvl){ return (def.type==='heavy'?13 : def.type==='swarm'?6 : 9) + (def.id==='titan'?3:0) + (lvl>1?(lvl-1)*2:0); }
+function unitR(def,lvl){ return (def.type==='heavy'?13 : def.type==='swarm'?6 : 9) + (def.id==='titan'?3:0) + (def.sz||0) + (lvl>1?(lvl-1)*2:0); }
 function mechShape(g,def,side,r,flash){
   const col = flash ? '#ffffff' : (side==='me'?C_ME:C_FOE);
   const fill = flash ? 'rgba(255,255,255,.6)' : (side==='me'?'rgba(125,255,107,.17)':'rgba(255,90,77,.17)');
@@ -1320,7 +1425,7 @@ function mechShape(g,def,side,r,flash){
       else { g.moveTo(0,-r*.2); g.lineTo(0,-r*1.3); }
       g.stroke(); break; }
     case 'ranged': {
-      const bow=def.id==='longbow';
+      const bow=def.rng>=250;                                      // long-barrel artillery (longbow, mortar)
       g.arc(0,r*.1,r*.8,0,6.2832); g.fill(); g.stroke();
       g.beginPath(); g.lineWidth=bow?2:3.6; g.moveTo(0,-r*.2); g.lineTo(0,-r*(bow?2.15:1.45)); g.stroke();
       g.lineWidth=1.5; g.beginPath();
@@ -1435,12 +1540,13 @@ function fxImpact(x,y,col,imp,rad){
 }
 function fxShot(s,flip){
   const q=FXQ[fxLevel]; if(!q.parts) return;
-  const p=SHOT[s.id]||SHOT.marauder, col=s.sideMine?0:1, hy=G.H;
+  const p=SHOT[fxClass(s.id)]||SHOT.marauder, col=s.sideMine?0:1, hy=G.H;
   const x0=s.fx*V.sx, y0=(flip?hy-s.fy:s.fy)*V.sy, x1=s.tx*V.sx, y1=(flip?hy-s.ty:s.ty)*V.sy;
   const rad=(s.sp||0)>0 ? s.sp*(V.sx+V.sy)/2*.8 : 0;
-  pSpawn(K_TRACER,s.id==='vulcan'||s.id==='titan'?2:col,x0,y0,p.imp,rad,p.t,p.w,x1,y1);   // vx=impact weight, vy=splash radius
+  const fc=fxClass(s.id);
+  pSpawn(K_TRACER,fc==='vulcan'||fc==='titan'?2:col,x0,y0,p.imp,rad,p.t,p.w,x1,y1);   // vx=impact weight, vy=splash radius
   if(q.parts>=128){ pSpawn(K_SPARK,3,x0,y0,(x1-x0)*.25,(y1-y0)*.25,.08,2); }
-  if(q.smoke && s.id==='vulcan') pSpawn(K_SMOKE,4,x0,y0,(Math.random()-.5)*20,(Math.random()-.5)*20,.5,3);
+  if(q.smoke && fc==='vulcan') pSpawn(K_SMOKE,4,x0,y0,(Math.random()-.5)*20,(Math.random()-.5)*20,.5,3);
 }
 function fxExplode(x,y,def,side){
   const q=FXQ[fxLevel]; if(!q.parts) return;
@@ -1540,9 +1646,10 @@ function battleAudio(B,f){
   if(!AUD.on||!AUD.ctx) return;
   const fast=G.battleSpeed>2;
   let b1=null,b2=null;
-  for(const s of f.shots){ const w=SHOT_PRIO[s.id]||0; if(!b1||w>(SHOT_PRIO[b1.id]||0)){ b2=b1; b1=s; } else if(!b2||w>(SHOT_PRIO[b2.id]||0)) b2=s; }
-  if(b1 && (!fast||(SHOT_PRIO[b1.id]||0)>=5)) sfx('shot_'+b1.id);
-  if(b2 && !fast) sfx('shot_'+b2.id);
+  const pr=s=>SHOT_PRIO[fxClass(s.id)]||0;
+  for(const s of f.shots){ if(!b1||pr(s)>pr(b1)){ b2=b1; b1=s; } else if(!b2||pr(s)>pr(b2)) b2=s; }
+  if(b1 && (!fast||pr(b1)>=5)) sfx('shot_'+fxClass(b1.id));
+  if(b2 && !fast) sfx('shot_'+fxClass(b2.id));
   let booms=0;
   for(let i=0;i<B.n&&booms<2;i++){
     if(B.prev.ents[i].hp>0 && f.ents[i].hp<=0){ booms++; const t=f.ents[i].def.type; sfx(f.ents[i].def.id==='titan'?'boom_big':t==='heavy'?'boom':t==='swarm'?'boom_small':'boom'); }
@@ -1707,11 +1814,16 @@ function tickPlanTimer(){
 function confirmReady(force){
   if(G.phase!=='plan'||G.myReady) return;
   if(!G.myDeploy.length && force!==true){ toast('Desplegá al menos una unidad'); return; }
+  if(G.offer.length && !G.unlockPicked){
+    if(force!==true){ toast('Elegí qué unidad desbloquear (o confirmá de nuevo para tomar la primera)'); if(!G._warnedOffer){ G._warnedOffer=true; return; } }
+    pickUnlock(G.offer[0]);                       // timeout / second confirm: take the first offered unit (deterministic)
+  }
+  G._warnedOffer=false;
   stopPlanTimer();
   G.myReady=true; hideSummary();
   $('btnReady').disabled=true; $('btnUndo').disabled=true; $('btnReady').classList.remove('pulse');
   G.selected=null; renderShop();
-  G.sentReady={t:'ready', round:G.round, deploy:G.myDeploy, tech:G.myTech};
+  G.sentReady={t:'ready', round:G.round, deploy:G.myDeploy, tech:G.myTech, unlock:G.unlockPicked||null};
   send(G.sentReady);
   $('phaseNote').textContent = G.foeReady ? 'Resolviendo combate…' : 'Despliegue confirmado. Esperando al rival…';
   tryResolve();
@@ -1757,6 +1869,12 @@ function expand(deploy, side, tech){
         case 'longbow': rng+=80; dmg*=1.25; break;
         case 'vulcan': splash*=1.8; break;
         case 'titan': dmg*=1.4; siege=true; break;
+        case 'wasp': dmg*=1.4; break;                      // +40% damage
+        case 'hound': cdMul=0.625; break;                  // +60% fire rate
+        case 'lancer': dmg*=1.3; rng+=30; break;
+        case 'bulwark': hp*=1.4; break;
+        case 'mortar': rng+=60; dmg*=1.2; break;
+        case 'arclight': cdMul=0.667; break;               // +50% fire rate
       }
     }
     const startHp = d.dmgFrac!=null ? hp*d.dmgFrac : hp; // persistent damage
@@ -1772,6 +1890,7 @@ function expand(deploy, side, tech){
   });
   return ents;
 }
+const BASE_DMG_FLAT=20, BASE_DMG_RATE=0.30;   // part of the rules: change => bump SIM_VERSION
 function simulate(hostDeploy, guestDeploy, hostTech, guestTech, seed){
   const rng=makeRNG(seed);
   const ents=[...expand(hostDeploy,'host',hostTech), ...expand(guestDeploy,'guest',guestTech)];
@@ -1827,6 +1946,13 @@ function simulate(hostDeploy, guestDeploy, hostTech, guestTech, seed){
   const hostHP=ents.filter(e=>e.side==='host').reduce((s,e)=>s+Math.max(0,e.hp),0);
   const guestHP=ents.filter(e=>e.side==='guest').reduce((s,e)=>s+Math.max(0,e.hp),0);
   let winner = hostHP>guestHP?'host':(guestHP>hostHP?'guest':'draw');
+  // Base damage (Mechabellum): the round's loser takes damage from the WINNER'S SURVIVING units: a flat amount plus a share
+  // of their value (unit cost per member x 2^(level-1), the cost of merging up to that level).
+  const baseDmg={host:0,guest:0};
+  if(winner!=='draw'){
+    let v=0; for(const e of ents) if(e.side===winner&&e.hp>0) v+=(e.def.cost/e.def.count)*Math.pow(2,e.lvl-1);
+    baseDmg[winner==='host'?'guest':'host']=Math.round(BASE_DMG_FLAT+BASE_DMG_RATE*v);
+  }
   // survival fraction per deploy entry (for persistent damage next round)
   function survival(side){
     const map={};
@@ -1838,7 +1964,7 @@ function simulate(hostDeploy, guestDeploy, hostTech, guestTech, seed){
     return map; // {di:{hp,max,rev}}
   }
   return {frames, winner, hostHP:Math.round(hostHP), guestHP:Math.round(guestHP),
-          hostSurv:survival('host'), guestSurv:survival('guest'),
+          hostSurv:survival('host'), guestSurv:survival('guest'), baseDmg,
           stats:ents.map(e=>({id:e.id,side:e.side,di:e.di,dealt:Math.round(e.dealt),kills:e.kills,alive:e.hp>0}))};
 }
 
@@ -1886,6 +2012,14 @@ document.querySelectorAll('.speed .spd').forEach(b=>{
   };
 });
 
+// null while the match goes on; 'me' | 'foe' | 'draw' when it is over
+function matchOutcome(){
+  if(G.baseMe<=0&&G.baseFoe<=0) return 'draw';
+  if(G.baseFoe<=0) return 'me';
+  if(G.baseMe<=0) return 'foe';
+  if(G.round>=MAX_ROUNDS) return G.baseMe>G.baseFoe?'me':G.baseFoe>G.baseMe?'foe':'draw';
+  return null;
+}
 function finishRound(result, myColorSide){
   let iWon;
   if(result.winner==='draw') iWon=null;
@@ -1894,27 +2028,35 @@ function finishRound(result, myColorSide){
   const foeHP= myColorSide==='host'?result.guestHP:result.hostHP;
 
   if(result.stats){ try{ renderSummary(buildSummary(result.stats,myColorSide),G.round); }catch(_){} }
-  showBanner(iWon===true?'VICTORIA':iWon===false?'DERROTA':'EMPATE', iWon===true?'':iWon===false?'lose':'draw', `${myHP} vs ${foeHP} HP restante`);
-  if(iWon===true){ G.winsMe++; logLine(`Ronda ${G.round}: <b class="p1">${esc(G.name)}</b> gana. HP restante ${myHP} vs ${foeHP}.`,'win'); }
-  else if(iWon===false){ G.winsFoe++; logLine(`Ronda ${G.round}: <b class="p2">${esc(G.foeName)}</b> gana. HP restante ${foeHP} vs ${myHP}.`,'win'); }
-  else logLine(`Ronda ${G.round}: empate técnico (${myHP} vs ${foeHP}).`,'win');
+  // damage to the loser's base: both machines read the same deterministic result
+  const dmgToMe = (result.baseDmg && result.baseDmg[myColorSide]) || 0;
+  const dmgToFoe = (result.baseDmg && result.baseDmg[myColorSide==='host'?'guest':'host']) || 0;
+  G.baseMe = Math.max(0, G.baseMe - dmgToMe); G.baseFoe = Math.max(0, G.baseFoe - dmgToFoe);
+  const dmg = iWon===true ? dmgToFoe : iWon===false ? dmgToMe : 0;
+  showBanner(iWon===true?'VICTORIA':iWon===false?'DERROTA':'EMPATE', iWon===true?'':iWon===false?'lose':'draw',
+    dmg ? `−${dmg} BASE ${iWon===true?G.foeName.toUpperCase():G.name.toUpperCase()}` : `${myHP} vs ${foeHP} HP restante`);
+  if(iWon===true){ G.winsMe++; logLine(`Ronda ${G.round}: <b class="p1">${esc(G.name)}</b> gana (HP restante ${myHP} vs ${foeHP}). Daño a la base de <b class="p2">${esc(G.foeName)}</b>: −${dmgToFoe} → ${G.baseFoe}.`,'win'); }
+  else if(iWon===false){ G.winsFoe++; logLine(`Ronda ${G.round}: <b class="p2">${esc(G.foeName)}</b> gana (HP restante ${foeHP} vs ${myHP}). Daño a tu base: −${dmgToMe} → ${G.baseMe}.`,'win'); }
+  else logLine(`Ronda ${G.round}: empate técnico (${myHP} vs ${foeHP}). Sin daño a las bases.`,'win');
 
   updateHUD();
   G.phase='between';
   $('phaseNote').textContent='Combate terminado · preparando la siguiente ronda…';
 
-  // match end?
-  if(G.winsMe>=3||G.winsFoe>=3){
-    G.phase='over'; stopPlanTimer();
-    const champ = G.winsMe>=3?G.name:G.foeName;
-    const cls = G.winsMe>=3?'p1':'p2';
-    logLine(`★ FIN DEL ASEDIO ★ Comandante <b class="${cls}">${esc(champ)}</b> conquista (${G.winsMe}–${G.winsFoe}).`,'win');
+  // match end: a base reached 0 (or the round limit: more base HP wins)
+  const out=matchOutcome();
+  if(out){
+    G.phase='over'; G.matchEnded=true; stopPlanTimer();
+    const champ = out==='me'?G.name:G.foeName;
+    const cls = out==='me'?'p1':'p2';
+    logLine(out==='draw' ? `★ FIN DEL ASEDIO ★ Empate: las dos bases quedaron en ${G.baseMe}.`
+                         : `★ FIN DEL ASEDIO ★ Comandante <b class="${cls}">${esc(champ)}</b> destruye la base rival (${G.baseMe} vs ${G.baseFoe}).`,'win');
     $('phaseNote').textContent='Partida terminada. Volvé al lobby para jugar otra.';
     $('btnReady').disabled=true; $('btnUndo').disabled=true;
     endReconnect();
     updateRematchBtn(); $('btnShareReplay').hidden=!(Rec.cur&&Rec.cur.rounds.length);
     $('btnLobby').style.display='';   // heartbeat keeps running: a slow-playback rival must not look dead
-    toast(G.winsMe>=3?'¡GANASTE EL ASEDIO!':'Perdiste el asedio');
+    toast(out==='me'?'¡GANASTE EL ASEDIO!':out==='foe'?'Perdiste el asedio':'Empate');
     return;
   }
 
@@ -2002,8 +2144,8 @@ function hideSummary(){ const b=$('summary'); if(b) b.hidden=true; }
    tech sets): a few KB, no video, no per-frame data. Viewing = re-simulating with the same inputs. Replays
    are recorded automatically on both machines, kept in localStorage, and shareable as a compressed link
    (in the URL #fragment, so it never reaches any server). Anything imported is sanitized like network input. */
-const SIM_VERSION=3;      // bump whenever simulate()/UNITS/TYPE_ADV/lvlMult change (tests/run.js enforces this)
-const NET_VERSION=1;      // bump whenever the network protocol (message formats/handshake) changes incompatibly
+const SIM_VERSION=5;      // bump whenever simulate()/UNITS/TYPE_ADV/lvlMult change (tests/run.js enforces this)
+const NET_VERSION=2;      // bump whenever the network protocol (message formats/handshake) changes incompatibly
 const REPLAY_KEY='ironsiege.replays', REPLAY_MAX=12, REPLAY_MAX_CODE=70000, REPLAY_MAX_BYTES=400000;
 const Rec={cur:null};
 const q1=v=>Math.round(v*10)/10;
@@ -2014,7 +2156,7 @@ function recStart(){
 }
 function recRound(seed,hd,gd,ht,gt,result){
   const r=Rec.cur; if(!r) return;
-  r.rounds.push({seed,hd:cloneJSON(hd),gd:cloneJSON(gd),ht:cloneJSON(ht),gt:cloneJSON(gt),w:result.winner,hp:[result.hostHP,result.guestHP]});
+  r.rounds.push({seed,hd:cloneJSON(hd),gd:cloneJSON(gd),ht:cloneJSON(ht),gt:cloneJSON(gt),w:result.winner,hp:[result.hostHP,result.guestHP],bd:[result.baseDmg.host,result.baseDmg.guest]});
   if(result.winner==='host') r.score[0]++; else if(result.winner==='guest') r.score[1]++;
   replaySave(r);                                  // saved after every round, so an interrupted match is kept too
 }
@@ -2037,7 +2179,8 @@ function sanitizeReplay(raw){
     const w=r.w==='host'||r.w==='guest'?r.w:'draw';
     if(w==='host') score[0]++; else if(w==='guest') score[1]++;
     const hp=Array.isArray(r.hp)?r.hp:[];
-    rounds.push({seed:r.seed,hd,gd,ht:sanitizeTech(r.ht),gt:sanitizeTech(r.gt),w,hp:[Math.max(0,+hp[0]||0),Math.max(0,+hp[1]||0)]});
+    const bd=Array.isArray(r.bd)?r.bd:[];
+    rounds.push({seed:r.seed,hd,gd,ht:sanitizeTech(r.ht),gt:sanitizeTech(r.gt),w,hp:[Math.max(0,+hp[0]||0),Math.max(0,+hp[1]||0)],bd:[Math.min(5000,Math.max(0,+bd[0]||0)),Math.min(5000,Math.max(0,+bd[1]||0))]});
   }
   return {v:1,sim:Math.max(0,Math.floor(+raw.sim)||0),id:String(raw.id||'').replace(/[^\w-]/g,'').slice(0,40)||Date.now().toString(36),
     t:isFinite(raw.t)?+raw.t:0,host:cleanName(raw.host,'HOST'),guest:cleanName(raw.guest,'GUEST'),rounds,score};
@@ -2083,13 +2226,15 @@ function replayOpen(rec){
   RP.rec=rec; G.phase='replay'; G.isHost=true;           // host = "me" (green, bottom): view is not flipped
   G.name=rec.host; G.foeName=rec.guest;
   $('tagMe').textContent=rec.host.toUpperCase(); $('tagFoe').textContent=rec.guest.toUpperCase();
-  $('lblWinMe').textContent='VICT. '+rec.host.toUpperCase(); $('lblWinFoe').textContent='VICT. '+rec.guest.toUpperCase();
+  $('lblWinMe').textContent='BASE '+rec.host.toUpperCase(); $('lblWinFoe').textContent='BASE '+rec.guest.toUpperCase();
   document.body.classList.add('replaying');
   show('scrGame'); hideSummary(); fitCanvas();
   if(rec.sim!==SIM_VERSION) toast('Replay de otra versión de las reglas: el resultado podría diferir');
   replayLoadRound(0,true);
   return true;
 }
+// base HP of both players after the first `upTo` rounds (from the recorded damage to each base)
+function replayBases(upTo){ let h=BASE_HP,g=BASE_HP; for(let k=0;k<upTo;k++){ const b=RP.rec.rounds[k].bd||[0,0]; h=Math.max(0,h-b[0]); g=Math.max(0,g-b[1]); } return [h,g]; }
 function replayScore(upTo){ let h=0,g=0; for(let k=0;k<upTo;k++){ const w=RP.rec.rounds[k].w; if(w==='host') h++; else if(w==='guest') g++; } return [h,g]; }
 function replayStopTimers(){ clearInterval(RP.timer); RP.timer=null; clearTimeout(RP.next); RP.next=null; }
 function replayLoadRound(k,play){
@@ -2098,7 +2243,7 @@ function replayLoadRound(k,play){
   const r=rec.rounds[k]; RP.round=k; RP.i=0;
   RP.res=simulate(r.hd,r.gd,r.ht,r.gt,r.seed);           // same inputs, same result as when it was played
   RP.mismatch=RP.res.winner!==r.w;
-  const [h,g]=replayScore(k); G.round=k+1; setStat('hRound',k+1); setStat('hWinMe',h); setStat('hWinFoe',g);
+  const [h,g]=replayBases(k); G.round=k+1; setStat('hRound',k+1); setStat('hWinMe',h); setStat('hWinFoe',g);
   hideSummary(); pClear();
   G._bt=HAS_RAF?beginBattle(RP.res.frames,'host'):null;
   const sk=$('rpSeek'); sk.max=RP.res.frames.length-1; sk.value=0;
@@ -2116,8 +2261,8 @@ function replayTick(){
 }
 function replayRoundEnd(){
   replayStopTimers(); RP.playing=false; endBattle();
-  const k=RP.round, r=RP.rec.rounds[k], [h,g]=replayScore(k+1);
-  setStat('hWinMe',h); setStat('hWinFoe',g);
+  const k=RP.round, r=RP.rec.rounds[k], [h,g]=replayScore(k+1), [bh,bg]=replayBases(k+1);
+  setStat('hWinMe',bh); setStat('hWinFoe',bg);
   renderSummary(buildSummary(RP.res.stats,'host'),k+1);
   const win=RP.res.winner==='host'?RP.rec.host:RP.res.winner==='guest'?RP.rec.guest:null;
   showBanner(win?'VICTORIA · '+win.toUpperCase():'EMPATE', win?(RP.res.winner==='host'?'':'lose'):'draw', `${RP.res.hostHP} vs ${RP.res.guestHP} HP restante`);
@@ -2141,8 +2286,8 @@ function replayClose(){
   if(G.phase!=='replay') return;
   replayStopTimers(); endBattle(); G._bt=null; pClear(); hideSummary();
   document.body.classList.remove('replaying'); field.style.transform='';
-  $('lblWinMe').textContent='MIS VICTORIAS'; $('lblWinFoe').textContent='RIVAL';
-  Object.assign(G,{phase:'lobby',name:RP.saved.name,foeName:RP.saved.foe,isHost:RP.saved.isHost,round:1,winsMe:0,winsFoe:0});
+  $('lblWinMe').textContent='MI BASE'; $('lblWinFoe').textContent='BASE RIVAL';
+  Object.assign(G,{phase:'lobby',name:RP.saved.name,foeName:RP.saved.foe,isHost:RP.saved.isHost,round:1,winsMe:0,winsFoe:0,baseMe:BASE_HP,baseFoe:BASE_HP});
   RP.rec=null; RP.res=null; show('scrLobby'); replayListRender();
 }
 
