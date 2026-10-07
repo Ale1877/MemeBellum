@@ -69,7 +69,7 @@ function handshake(p) {
 }
 
 // Dos máquinas que usan hostCreate()/joinRoom() reales sobre la red PeerJS falsa.
-const NET_NAMES = NAMES.concat(['hostCreate','joinRoom','beginReconnect','giveUpReconnect']);
+const NET_NAMES = NAMES.concat(['hostCreate','joinRoom','beginReconnect','giveUpReconnect','mmStart','MM']);
 function makeNetPair() {
   const { makeNet } = require('./fakepeer');
   const clock = makeClock(); const net = makeNet(clock);
@@ -87,7 +87,7 @@ function makeNetPair() {
   return { host: hl.api, guest: gl.api, hl, gl, clock, net, log, code, el };
 }
 // N máquinas independientes sobre la MISMA red PeerJS falsa y el mismo reloj (para matchmaking).
-const MM_NAMES = NAMES.concat(['mmStart','mmStop','mmCancel','mmRestart','MM','startMatch']);
+const MM_NAMES = NAMES.concat(['mmStart','mmStop','mmCancel','mmRestart','MM','startMatch','hostCreate','joinRoom']);
 function makeCrowd(n, opts = {}) {
   const { makeNet } = require('./fakepeer');
   const clock = makeClock(); const net = makeNet(clock);

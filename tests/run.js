@@ -667,6 +667,31 @@ pending.push((async () => {
   check('matchmaking: emparejar, carreras, zombis, esperas varadas, cancelar y entradas hostiles', fail.length === 0, fail.join('; '));
 }
 
+// (s) jugar con un amigo: crear sala + código, unirse (código en minúsculas), código inexistente, y convivencia con la búsqueda rápida
+{
+  const { makeNetPair, makeCrowd } = require('./net');
+  const fail = [];
+  // crear + unirse por código
+  const p = makeNetPair();
+  if (p.host.G.phase !== 'plan' || p.guest.G.phase !== 'plan') fail.push(`no arrancó la partida privada (${p.host.G.phase}/${p.guest.G.phase})`);
+  if (!/^[A-Z0-9]{6}$/.test(p.code)) fail.push('código de sala con formato inesperado: ' + p.code);
+  if (p.host.G.seed !== p.guest.G.seed || !p.host.G.token) fail.push('semilla/token distintos en la sala privada');
+  // tres máquinas: A crea sala, B busca, C usa el código de A en minúsculas, con un código inexistente primero
+  const c = makeCrowd(3); const [A, B, C] = c.ms; const el = (m, id) => m.ctx.document.getElementById(id);
+  A.api.hostCreate(); c.run(500);
+  const room = A.G.peer && A.G.peer.id, code = el(A, 'roomCode').textContent;
+  if (!room || room.includes('-q-')) fail.push('la sala privada no debe usar un buzón de búsqueda: ' + room);
+  B.api.mmStart(); c.run(20000);
+  if (A.G.phase !== 'lobby' || A.G.conn) fail.push('un buscador se coló en la sala privada del amigo');
+  if (!B.MM.on || B.MM.slot !== 0) fail.push('el buscador debía esperar en la cola (slot ' + B.MM.slot + ')');
+  el(C, 'joinCode').value = 'zzzzzz'; C.api.joinRoom(); c.run(20000);
+  if (C.G.phase !== 'lobby' || C.G.peer) fail.push('un código inexistente debía fallar limpio');
+  el(C, 'joinCode').value = code.toLowerCase(); C.api.joinRoom(); c.run(5000);
+  if (A.G.phase !== 'plan' || C.G.phase !== 'plan' || A.G.seed !== C.G.seed) fail.push('el amigo no pudo unirse con el código en minúsculas');
+  if (B.G.phase !== 'lobby' || !B.MM.on) fail.push('el buscador no debía verse afectado por la partida privada');
+  check('amigos: sala + código, unirse, código inexistente, y la búsqueda rápida convive sin colarse', fail.length === 0, fail.join('; '));
+}
+
 // --report: tabla de winrates entre todos los tipos y unidades
 if (process.argv.includes('--report')) {
   console.log('\nTriángulo por presupuesto (% victorias del que debería ganar):');

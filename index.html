@@ -210,7 +210,9 @@
   .rp-info b{color:var(--ink);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .rp-info span{color:var(--ink-dim);font-size:11px}
   .rp-row button{width:auto;margin:0;padding:8px 12px;flex:0 0 auto}
-  .card.hide{display:none}
+  .hide{display:none !important}
+  .section-title{font-family:var(--disp);font-weight:600;font-size:13px;letter-spacing:2px;color:var(--ink);margin:22px 0 4px}
+  .section-hint{font-size:12px;color:var(--ink-dim);line-height:1.5;margin:0 0 12px}
   .replaybar{display:none;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px}
   .replaybar button{width:auto;margin:0;padding:8px 14px;flex:0 0 auto}
   .replaybar input[type=range]{flex:1 1 160px;min-width:120px;accent-color:var(--phos)}
@@ -287,7 +289,9 @@
       <button class="danger" id="btnSearchCancel">CANCELAR BÚSQUEDA</button>
     </div>
   </div>
-  <div class="lobby-grid" style="margin-top:18px">
+  <div class="section-title" id="friendsLbl">JUGAR CON UN AMIGO · 1v1 PRIVADO</div>
+  <p class="section-hint" id="friendsHint">Creá una sala y pasale el enlace o el código a tu amigo; quien reciba el enlace solo toca UNIRSE.</p>
+  <div class="lobby-grid" style="margin-top:0">
     <div class="card" id="cardCreate">
       <h2>CREAR PARTIDA</h2>
       <p class="hint">Generás un código de sala y se lo pasás a tu rival. Esperás a que se una.</p>
@@ -503,7 +507,7 @@ function hostCreate(){
   if(!name){ toast('Poné tu nombre primero'); return; }
   if(!peerOk()) return;
   G.name=name; G.isHost=true;
-  $('replayCard').classList.add('hide');
+  $('replayCard').classList.add('hide'); $('cardSearch').classList.add('hide');
   const code=randCode();
   $('roomCode').textContent=code;
   $('createBox').style.display='block';
@@ -541,7 +545,7 @@ function joinRoom(){
   if(code.length<4){ toast('Código inválido'); return; }
   if(!peerOk()) return;
   G.name=name; G.isHost=false; G.code=code;
-  $('replayCard').classList.add('hide');
+  $('replayCard').classList.add('hide'); $('cardSearch').classList.add('hide');
   $('joinStatus').textContent='Conectando…';
   $('btnJoin').disabled=true;
   setChip(false,'CONECTANDO');
@@ -564,7 +568,7 @@ function joinFailed(why){
   clearTimeout(G._joinT);
   $('joinStatus').textContent='No se pudo conectar ('+why+')';
   setChip(false,'ERROR');
-  $('btnJoin').disabled=false; $('replayCard').classList.remove('hide');
+  $('btnJoin').disabled=false; $('replayCard').classList.remove('hide'); $('cardSearch').classList.remove('hide');
   try{ if(G.conn) G.conn.close(); }catch(_){}
   try{ if(G.peer) G.peer.destroy(); }catch(_){}
   G.conn=null; G.peer=null;
@@ -675,7 +679,7 @@ function leaveToLobby(){
   $('log').innerHTML='';
   hideSummary();
   $('createBox').style.display='none';
-  $('btnCreate').disabled=false; $('btnJoin').disabled=false; $('replayCard').classList.remove('hide'); replayListRender();
+  $('btnCreate').disabled=false; $('btnJoin').disabled=false; $('replayCard').classList.remove('hide'); $('cardSearch').classList.remove('hide'); replayListRender();
   $('joinStatus').textContent='';
   $('btnLobby').style.display='none';
   setChip(false,'OFFLINE');
@@ -751,7 +755,7 @@ function mmTimer(fn,ms){ const id=setTimeout(fn,ms); MM.t.push(id); return id; }
 function mmClearTimers(){ MM.t.forEach(clearTimeout); MM.t=[]; }
 function mmKill(pr){ try{ if(pr) pr.destroy(); }catch(_){} }
 function mmUI(on){
-  for(const id of ['cardCreate','cardJoin','replayCard']){ const e=$(id); if(e) e.classList.toggle('hide',on); }
+  for(const id of ['cardCreate','cardJoin','replayCard','friendsLbl','friendsHint']){ const e=$(id); if(e) e.classList.toggle('hide',on); }
   $('btnSearch').hidden=on; $('mmBox').hidden=!on;
 }
 function mmSay(t){ $('mmStatus').textContent=t; }
@@ -2204,6 +2208,8 @@ function esc(s){ return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;',
 $('btnCreate').onclick=hostCreate;
 $('btnJoin').onclick=joinRoom;
 $('btnLobby').onclick=leaveToLobby;
+try{ const n=localStorage.getItem('ironsiege.name'); if(n&&!$('playerName').value) $('playerName').value=cleanName(n,''); }catch(_){}
+$('playerName').addEventListener('input',e=>{ try{ localStorage.setItem('ironsiege.name',e.target.value.trim().slice(0,14)); }catch(_){} });
 $('btnSearch').onclick=mmStart;
 $('btnSearchCancel').onclick=mmCancel;
 $('btnReplayOpen').onclick=()=>{ const v=$('replayCode').value; if(!v.trim()){ toast('Pegá un enlace de replay'); return; } replayImport(v); };
@@ -2242,7 +2248,7 @@ $('btnShare').onclick=async()=>{
   copyText(url).then(ok=>toast(ok?'Enlace copiado':'No se pudo copiar el enlace'));
 };
 // opening ?sala=ABC123 pre-fills the join code
-try{ const q=new URLSearchParams(location.search).get('sala'); if(q){ $('joinCode').value=q.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,6); toast('Código cargado: poné tu nombre y unite'); } }catch(_){}
+try{ const q=new URLSearchParams(location.search).get('sala'); if(q){ $('joinCode').value=q.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,6); toast($('playerName').value.trim()?'Código cargado: tocá UNIRSE A SALA':'Código cargado: poné tu nombre y unite'); } }catch(_){}
 $('joinCode').addEventListener('keydown',e=>{ if(e.key==='Enter') joinRoom(); });
 
 // Phones suspend backgrounded tabs: keep the screen awake during a match, and when the user comes
