@@ -2,7 +2,7 @@
 // conectadas por una cola de mensajes en memoria (JSON, como WebRTC) y un reloj falso compartido.
 const { loadGame } = require('./load');
 
-const NAMES = ['simulate','UNITS','G','makeRNG','onData','send','startMatch','tryResolve','newRound','finishRound','playback','confirmReady','sanitizeDeploy','sanitizeTech','onFoeReady'];
+const NAMES = ['simulate','UNITS','G','makeRNG','onData','send','startMatch','tryResolve','newRound','finishRound','playback','confirmReady','sanitizeDeploy','sanitizeTech','onFoeReady','connectionLost','leaveToLobby','onIncoming'];
 
 function makeClock() {
   let now = 0, id = 1; const tm = new Map();
@@ -32,10 +32,14 @@ function makePair() {
   const hl = loadGame(NAMES, { ...sb }), gl = loadGame(NAMES, { ...sb });
   const host = hl.api, guest = gl.api;
   const queue = [];
-  const log = { host: [], guest: [] };                 // cada simulate() que corre cada máquina
+  const log = { host: [], guest: [], lost: { host: 0, guest: 0 } };                 // cada simulate() que corre cada máquina
   for (const [who, l] of [['host', hl], ['guest', gl]]) {
     const real = l.ctx.simulate;
     l.ctx.simulate = (...a) => { const r = real(...a); log[who].push({ winner: r.winner, hostHP: r.hostHP, guestHP: r.guestHP }); return r; };
+  }
+  for (const [who, l] of [['host', hl], ['guest', gl]]) {
+    const real = l.ctx.connectionLost;
+    l.ctx.connectionLost = (...a) => { log.lost[who]++; return real(...a); };
   }
   host.G.isHost = true;  host.G.name = 'H'; host.G.conn = { open: true, send: m => queue.push({ to: guest, m: JSON.parse(JSON.stringify(m)) }) };
   guest.G.isHost = false; guest.G.name = 'G'; guest.G.conn = { open: true, send: m => queue.push({ to: host, m: JSON.parse(JSON.stringify(m)) }) };

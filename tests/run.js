@@ -143,6 +143,71 @@ for (const budget of TRI_BUDGETS) for (const [a, b] of TRI) {
   check('entrada hostil: saneada, sin crashes ni cambios de estado', fail.length === 0, fail.join('; '));
 }
 
+// (g) salud de la conexión
+{
+  const { makePair, handshake } = require('./net');
+  const fail = [];
+  const addUnits = (m, y) => m.G.myDeploy.push({ id: 'warden', lvl: 1, x: 300, y }, { id: 'marauder', lvl: 1, x: 600, y });
+
+  // 1. partida completa con velocidades muy distintas: nunca debe haber una desconexión falsa
+  {
+    const p = makePair(); handshake(p);
+    p.host.G.battleSpeed = 4; p.guest.G.battleSpeed = 0.5;
+    let g = 0;
+    while (!(p.host.G.phase === 'over' && p.guest.G.phase === 'over') && g++ < 400000) {
+      for (const m of [p.host, p.guest]) if (m.G.phase === 'plan' && !m.G.myReady) { addUnits(m, 400); m.confirmReady(); }
+      p.pump(); p.clock.advance(50); p.pump();
+    }
+    if (!(p.host.G.phase === 'over' && p.guest.G.phase === 'over')) fail.push('la partida completa no terminó');
+    if (p.log.lost.host || p.log.lost.guest) fail.push('desconexión falsa en partida normal: ' + JSON.stringify(p.log.lost));
+    if (JSON.stringify(p.log.host) !== JSON.stringify(p.log.guest)) fail.push('simulaciones distintas a lo largo de la partida');
+    if (p.host.G.winsMe !== p.guest.G.winsFoe || p.host.G.winsFoe !== p.guest.G.winsMe) fail.push('marcadores distintos');
+  }
+  // 2. silencio del rival: se detecta en ~15s y la partida se marca interrumpida
+  {
+    const p = makePair(); handshake(p);
+    for (let t = 0; t < 12000; t += 500) { p.clock.advance(500); p.pump(); }
+    if (p.log.lost.host) fail.push('falso positivo con tráfico normal');
+    p.queue.length = 0;
+    for (let t = 0; t < 20000; t += 500) { p.clock.advance(500); p.queue.length = 0; }   // el rival no llega a nosotros
+    if (p.log.lost.host !== 1 || p.host.G.phase !== 'over' || p.host.G.conn !== null) fail.push(`silencio no detectado (lost=${p.log.lost.host}, fase=${p.host.G.phase})`);
+  }
+  // 3. cierre de conexión a mitad de combate corta la reproducción
+  {
+    const p = makePair(); handshake(p);
+    addUnits(p.host, 400); addUnits(p.guest, 380);
+    p.host.confirmReady(); p.pump(); p.guest.confirmReady(); p.pump();
+    p.clock.advance(300);
+    p.guest.connectionLost('Se cortó la conexión');
+    const simsBefore = p.log.guest.length;
+    p.clock.advance(60000);
+    if (p.guest.G.phase !== 'over') fail.push('fase tras corte: ' + p.guest.G.phase);
+    if (p.guest.G.round !== 1) fail.push('la partida siguió avanzando tras el corte');
+    if (p.log.guest.length !== simsBefore) fail.push('simuló tras el corte');
+  }
+  // 4. volver al lobby limpia el estado y cancela timers pendientes
+  {
+    const p = makePair(); handshake(p);
+    p.guest.G.battleSpeed = 4; p.host.G.battleSpeed = 4;
+    addUnits(p.host, 400); addUnits(p.guest, 380);
+    p.host.confirmReady(); p.pump(); p.guest.confirmReady(); p.pump();
+    let g = 0; while (p.host.G.phase !== 'between' && p.host.G.phase !== 'over' && g++ < 5000) p.clock.advance(20);
+    p.host.leaveToLobby();
+    p.clock.advance(120000);
+    const G = p.host.G;
+    if (G.phase !== 'lobby' || G.myDeploy.length || G.conn || G.peer || G.isHost) fail.push('leaveToLobby no limpió: ' + G.phase);
+    if (p.log.lost.host) fail.push('leaveToLobby no debería contar como conexión perdida');
+  }
+  // 5. una segunda conexión a una sala ocupada se rechaza
+  {
+    const p = makePair(); handshake(p);
+    let closed = false; const before = p.host.G.conn;
+    p.host.onIncoming({ close() { closed = true; }, on() {} });
+    if (!closed || p.host.G.conn !== before) fail.push('no rechazó la conexión intrusa');
+  }
+  check('conexión: heartbeat, corte, volver al lobby, sala ocupada', fail.length === 0, fail.join('; '));
+}
+
 // --report: tabla de winrates entre todos los tipos y unidades
 if (process.argv.includes('--report')) {
   console.log('\nTriángulo por presupuesto (% victorias del que debería ganar):');

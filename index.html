@@ -243,6 +243,7 @@
 
   <div class="bar">
     <button class="ghost" id="btnUndo">DESHACER ÚLTIMA</button>
+    <button class="danger" id="btnLobby" style="display:none">VOLVER AL LOBBY</button>
   </div>
   <div class="phase-note" id="phaseNote"></div>
 
@@ -352,18 +353,25 @@ function hostCreate(){
   setChip(false,'INICIANDO…');
   G.peer=new Peer(PREFIX+code);
   G.peer.on('open',()=> setChip(false,'SALA ABIERTA'));
-  G.peer.on('connection', c=>{ G.conn=c; wireConn(c); });
+  G.peer.on('connection', onIncoming);
+  G.peer.on('disconnected', ()=>{ if(G.phase==='lobby'){ try{ G.peer.reconnect(); }catch(_){} } });
   G.peer.on('error', e=>{
     if(e.type==='unavailable-id'){ $('roomCode').textContent=randCode(); /*retry*/ hostRetry(); }
     else { toast('Error de red: '+e.type); setChip(false,'ERROR'); $('btnCreate').disabled=false; }
   });
+}
+// Only one opponent per room: later connections to the same code are refused.
+function onIncoming(c){
+  if(G.conn && G.conn.open){ try{ c.close(); }catch(_){} return; }
+  G.conn=c; wireConn(c);
 }
 function hostRetry(){
   if(G.peer) G.peer.destroy();
   const code=$('roomCode').textContent;
   G.peer=new Peer(PREFIX+code);
   G.peer.on('open',()=> setChip(false,'SALA ABIERTA'));
-  G.peer.on('connection', c=>{ G.conn=c; wireConn(c); });
+  G.peer.on('connection', onIncoming);
+  G.peer.on('disconnected', ()=>{ if(G.phase==='lobby'){ try{ G.peer.reconnect(); }catch(_){} } });
   G.peer.on('error', e=>{ toast('Error: '+e.type); });
 }
 
@@ -374,29 +382,91 @@ function joinRoom(){
   if(code.length<4){ toast('Código inválido'); return; }
   G.name=name; G.isHost=false;
   $('joinStatus').textContent='Conectando…';
+  $('btnJoin').disabled=true;
   setChip(false,'CONECTANDO');
   G.peer=new Peer();
   G.peer.on('open',()=>{
     const c=G.peer.connect(PREFIX+code,{reliable:true});
     G.conn=c; wireConn(c);
+    clearTimeout(G._joinT);
+    G._joinT=setTimeout(()=>{ if(G.conn===c && !c.open){ joinFailed('tiempo de espera agotado'); } },15000);
   });
-  G.peer.on('error', e=>{ $('joinStatus').textContent='No se pudo conectar ('+e.type+')'; setChip(false,'ERROR'); });
+  G.peer.on('error', e=>joinFailed(e.type));
+}
+function joinFailed(why){
+  if(G.phase!=='lobby') return;
+  clearTimeout(G._joinT);
+  $('joinStatus').textContent='No se pudo conectar ('+why+')';
+  setChip(false,'ERROR');
+  $('btnJoin').disabled=false;
+  try{ if(G.conn) G.conn.close(); }catch(_){}
+  try{ if(G.peer) G.peer.destroy(); }catch(_){}
+  G.conn=null; G.peer=null;
 }
 
 function wireConn(c){
   c.on('open', ()=>{
+    clearTimeout(G._joinT);
     setChip(true,'CONECTADO');
     send({t:'hello', name:G.name});
   });
-  c.on('data', onData);
-  c.on('close', ()=>{ setChip(false,'DESCONECTADO'); toast('Se cortó la conexión'); });
+  c.on('data', d=>{ if(G.conn===c) onData(d); });
+  c.on('close', ()=>{ if(G.conn===c) connectionLost('Se cortó la conexión'); });
+  c.on('error', ()=>{ if(G.conn===c) connectionLost('Error de conexión'); });
+}
+
+/* ---------- Connection health ---------- */
+// Heartbeat: both sides ping every 3s; 5 silent beats (~15s) = the rival is gone.
+const HB_MS=3000, HB_MAX_SILENT=5;
+function startHeartbeat(){
+  stopHeartbeat(); G.silentTicks=0;
+  G._hb=setInterval(()=>{
+    send({t:'ping'});
+    if(++G.silentTicks>=HB_MAX_SILENT) connectionLost('El rival dejó de responder');
+  },HB_MS);
+}
+function stopHeartbeat(){ clearInterval(G._hb); G._hb=null; }
+function stopPlayback(){ if(pbTimer){ clearInterval(pbTimer); pbTimer=null; } clearTimeout(G._nrTimer); G._nrTimer=null; }
+function connectionLost(msg){
+  stopHeartbeat();
+  setChip(false,'DESCONECTADO');
+  const inMatch = G.phase!=='lobby' && G.phase!=='over';
+  if(G.phase==='lobby'){ toast(msg); return; }
+  G.conn=null;
+  if(inMatch){
+    stopPlayback();
+    G.phase='over';
+    $('btnReady').disabled=true; $('btnUndo').disabled=true;
+    $('phaseNote').textContent=msg+'. La partida no puede continuar.';
+    logLine(`✖ ${esc(msg)}. Partida interrumpida.`,'win');
+    toast(msg);
+  }
+  $('btnLobby').style.display='';
+}
+function leaveToLobby(){
+  stopHeartbeat(); stopPlayback();
+  const c=G.conn, pr=G.peer;
+  G.conn=null; G.peer=null;                       // detach first so close events are ignored
+  try{ if(c) c.close(); }catch(_){}
+  try{ if(pr) pr.destroy(); }catch(_){}
+  Object.assign(G,{ phase:'lobby', isHost:false, foeName:'RIVAL', myReady:false, foeReady:false, foeDeploy:null,
+    foeTech:{}, foeLastDeploy:null, foeLastTech:{}, pendingReady:null, myDeploy:[], myPending:[], myTech:{} });
+  $('log').innerHTML='';
+  $('createBox').style.display='none';
+  $('btnCreate').disabled=false; $('btnJoin').disabled=false;
+  $('joinStatus').textContent='';
+  $('btnLobby').style.display='none';
+  setChip(false,'OFFLINE');
+  show('scrLobby');
 }
 function send(obj){ if(G.conn && G.conn.open) G.conn.send(obj); }
 
 function cleanName(n,def='RIVAL'){ return (typeof n==='string' && n.trim()) ? n.trim().slice(0,14) : def; }
 function onData(m){
   if(!m || typeof m!=='object') return;
+  G.silentTicks=0;                                // any traffic proves the rival is alive
   switch(m.t){
+    case 'ping': break;
     case 'hello':
       if(G.phase!=='lobby') break;
       G.foeName=cleanName(m.name);
@@ -482,6 +552,8 @@ function startMatch(){
   $('tagMe').textContent=G.name.toUpperCase();
   $('tagFoe').textContent=G.foeName.toUpperCase();
   show('scrGame');
+  $('btnLobby').style.display='none';
+  startHeartbeat();
   buildShop();
   newRound(true);
   logLine(`Conexión establecida. <b class="p1">${esc(G.name)}</b> vs <b class="p2">${esc(G.foeName)}</b>. ¡Que empiece el asedio!`,'win');
@@ -897,8 +969,9 @@ function finishRound(result, myColorSide){
     const champ = G.winsMe>=3?G.name:G.foeName;
     const cls = G.winsMe>=3?'p1':'p2';
     logLine(`★ FIN DEL ASEDIO ★ Comandante <b class="${cls}">${esc(champ)}</b> conquista (${G.winsMe}–${G.winsFoe}).`,'win');
-    $('phaseNote').textContent='Partida terminada. Recargá para jugar otra.';
+    $('phaseNote').textContent='Partida terminada. Volvé al lobby para jugar otra.';
     $('btnReady').disabled=true; $('btnUndo').disabled=true;
+    $('btnLobby').style.display='';   // heartbeat keeps running: a slow-playback rival must not look dead
     toast(G.winsMe>=3?'¡GANASTE EL ASEDIO!':'Perdiste el asedio');
     return;
   }
@@ -924,7 +997,7 @@ function finishRound(result, myColorSide){
   G.round++;
   G.income+=80;
   toast(iWon===true?'Ronda ganada':iWon===false?'Ronda perdida':'Empate');
-  setTimeout(()=>{ newRound(false); $('phaseNote').textContent=`Ronda ${G.round}. +${G.income}◈ de ingreso. Supervivientes dañados en campo.`; }, 1400);
+  G._nrTimer=setTimeout(()=>{ if(G.phase!=='between') return; newRound(false); $('phaseNote').textContent=`Ronda ${G.round}. +${G.income}◈ de ingreso. Supervivientes dañados en campo.`; }, 1400);
 }
 
 /* ---------- Unit info modal ---------- */
@@ -996,6 +1069,7 @@ function esc(s){ return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;',
 /* ---------- wire lobby ---------- */
 $('btnCreate').onclick=hostCreate;
 $('btnJoin').onclick=joinRoom;
+$('btnLobby').onclick=leaveToLobby;
 $('roomCode').onclick=()=>{ navigator.clipboard?.writeText($('roomCode').textContent); toast('Código copiado'); };
 $('joinCode').addEventListener('input',e=>e.target.value=e.target.value.toUpperCase());
 window.addEventListener('resize',()=>drawField(null));
