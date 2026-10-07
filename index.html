@@ -197,6 +197,28 @@
     .modebar{display:grid;grid-template-columns:1fr 1fr}
     .code-big{font-size:26px;letter-spacing:6px}
   }
+
+  /* ---------- Motion (transform/opacity only: composited, no layout) ---------- */
+  .screen.active{animation:fadeIn .3s ease-out}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .log .r{animation:fadeIn .35s ease-out}
+  .board-wrap{position:relative;overflow:hidden}
+  .banner{position:absolute;left:0;right:0;top:34%;text-align:center;pointer-events:none;opacity:0;
+    font-family:var(--disp);font-weight:700;letter-spacing:.32em;font-size:clamp(20px,6vw,42px);color:var(--phos);
+    text-shadow:0 0 18px currentColor,0 2px 0 rgba(0,0,0,.6);will-change:transform,opacity}
+  .banner small{display:block;font-size:.34em;letter-spacing:.3em;margin-top:6px;color:var(--ink-dim);text-shadow:none}
+  .banner.lose{color:var(--red)} .banner.draw,.banner.info{color:var(--amber)}
+  .banner.show{animation:bannerIn 1.5s ease-out both}
+  @keyframes bannerIn{0%{opacity:0;transform:scale(1.5)}14%{opacity:1;transform:scale(1)}72%{opacity:1;transform:scale(1)}100%{opacity:0;transform:scale(.97)}}
+  .stat b.bump{animation:bump .45s ease-out}
+  @keyframes bump{0%{transform:scale(1.35);color:var(--amber)}100%{transform:scale(1)}}
+  #btnReady{position:relative}
+  #btnReady.pulse::after{content:'';position:absolute;inset:-4px;border:1px solid var(--phos);pointer-events:none;opacity:0;animation:pulseRing 1.8s ease-out infinite}
+  @keyframes pulseRing{0%{opacity:.8;transform:scale(1)}100%{opacity:0;transform:scale(1.04,1.25)}}
+  .unit-card.sel{box-shadow:0 0 0 1px var(--phos) inset,0 0 14px rgba(125,255,107,.15)}
+  @media (prefers-reduced-motion:reduce){
+    *,*::before,*::after{animation-duration:.01ms !important;animation-iteration-count:1 !important;transition-duration:.01ms !important}
+  }
 </style>
 </head>
 <body>
@@ -265,6 +287,7 @@
 
   <div class="board-wrap">
     <canvas id="field" width="1000" height="440"></canvas>
+    <div class="banner" id="banner" aria-live="polite"></div>
   </div>
   <div class="legend">
     <span><b style="color:var(--phos)">■</b> tu zona de despliegue (mitad inferior)</span>
@@ -694,12 +717,20 @@ function newRound(first){
   if(pr && pr.round===G.round) applyFoeReady(pr);
 }
 
+const hudLast={};
+function setStat(id,v){
+  const el=$(id);
+  if(hudLast[id]!==v){ const first=hudLast[id]===undefined; hudLast[id]=v; el.textContent=v; if(!first){ el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump'); } }
+}
 function updateHUD(){
-  $('hRound').textContent=G.round;
-  $('hGold').textContent=G.gold;
-  $('hInc').textContent=G.income;
-  $('hWinMe').textContent=G.winsMe;
-  $('hWinFoe').textContent=G.winsFoe;
+  setStat('hRound',G.round); setStat('hGold',G.gold); setStat('hInc',G.income); setStat('hWinMe',G.winsMe); setStat('hWinFoe',G.winsFoe);
+  $('btnReady').classList.toggle('pulse', G.phase==='plan' && !G.myReady && G.myDeploy.length>0);   // nudge: you can confirm now
+}
+function showBanner(text,cls,sub){
+  const b=$('banner'); if(!b) return;
+  b.className='banner '+(cls||''); b.textContent=text;
+  if(sub){ const s=document.createElement('small'); s.textContent=sub; b.appendChild(s); }
+  void b.offsetWidth; b.classList.add('show');          // restart the CSS animation
 }
 
 /* ---------- Shop ---------- */
@@ -1192,6 +1223,8 @@ function beginBattle(frames,mySide){
     B.mine[i]=mine?1:0; B.rad[i]=unitR(e.def,e.lvl); B.ang[i]=mine?-1.5708:1.5708;
     B.spr[i]=spriteFor(e.def,side,e.lvl,false); B.sprF[i]=spriteFor(e.def,side,e.lvl,true);
   }
+  B.maxMine=0; B.maxFoe=0;
+  for(let i=0;i<n;i++){ const e=frames[0].ents[i]; if(B.mine[i]) B.maxMine+=e.maxhp; else B.maxFoe+=e.maxhp; }
   pClear(); shakeAmp=0; wdN=0; wdSum=0;
   return B;
 }
@@ -1225,6 +1258,8 @@ function drawBattle(B,now,dtReal,dtFx){
     let yy=pe.y+(ce.y-pe.y)*a; if(flip) yy=H-yy;
     B.px[i]=(pe.x+(ce.x-pe.x)*a)*sx; B.py[i]=yy*sy;
   }
+  let sumMine=0, sumFoe=0;
+  for(let i=0;i<n;i++){ if(B.alive[i]){ if(B.mine[i]) sumMine+=CE[i].hp; else sumFoe+=CE[i].hp; } }
   const turn=Math.min(1,dtReal*12);
   for(let i=0;i<n;i++){
     if(!B.alive[i]) continue;
@@ -1242,6 +1277,11 @@ function drawBattle(B,now,dtReal,dtFx){
     ctx.fillStyle=side?C_ME:C_FOE;
     for(let i=0;i<n;i++){ if(B.alive[i]&&B.mine[i]===side&&CE[i].hp<CE[i].maxhp) ctx.fillRect(B.px[i]-B.rad[i],B.py[i]-B.rad[i]-7,B.rad[i]*2*(CE[i].hp/CE[i].maxhp),3); }
   }
+  // army strength bars (remaining HP vs. starting maximum)
+  const bw=Math.min(V.w*.34,240), bx=10, by=8;
+  ctx.fillStyle='rgba(0,0,0,.5)'; ctx.fillRect(bx,by,bw,5); ctx.fillRect(V.w-bx-bw,by,bw,5);
+  ctx.fillStyle=C_ME; ctx.fillRect(bx,by,bw*Math.min(1,sumMine/(B.maxMine||1)),5);
+  const fw=bw*Math.min(1,sumFoe/(B.maxFoe||1)); ctx.fillStyle=C_FOE; ctx.fillRect(V.w-bx-fw,by,fw,5);
   pDraw();
 }
 function renderLoop(){
@@ -1274,7 +1314,7 @@ function confirmReady(){
   if(G.phase!=='plan'||G.myReady) return;
   if(!G.myDeploy.length){ toast('Desplegá al menos una unidad'); return; }
   G.myReady=true;
-  $('btnReady').disabled=true; $('btnUndo').disabled=true;
+  $('btnReady').disabled=true; $('btnUndo').disabled=true; $('btnReady').classList.remove('pulse');
   G.selected=null; renderShop();
   G.sentReady={t:'ready', round:G.round, deploy:G.myDeploy, tech:G.myTech};
   send(G.sentReady);
@@ -1408,6 +1448,7 @@ function playback(result){
   let i=0;
   const myColorSide = G.isHost?'host':'guest';
   $('phaseNote').textContent='⚔ COMBATE EN CURSO · usá VELOCIDAD para acelerar';
+  showBanner('⚔ COMBATE','info');
   const frames=result.frames;
   // The sim is canonical (host bottom, guest top). Each player must see THEIR army at the
   // bottom, as they deployed it, so the guest's view is flipped vertically (draw-only).
@@ -1447,6 +1488,7 @@ function finishRound(result, myColorSide){
   const myHP = myColorSide==='host'?result.hostHP:result.guestHP;
   const foeHP= myColorSide==='host'?result.guestHP:result.hostHP;
 
+  showBanner(iWon===true?'VICTORIA':iWon===false?'DERROTA':'EMPATE', iWon===true?'':iWon===false?'lose':'draw', `${myHP} vs ${foeHP} HP restante`);
   if(iWon===true){ G.winsMe++; logLine(`Ronda ${G.round}: <b class="p1">${esc(G.name)}</b> gana. HP restante ${myHP} vs ${foeHP}.`,'win'); }
   else if(iWon===false){ G.winsFoe++; logLine(`Ronda ${G.round}: <b class="p2">${esc(G.foeName)}</b> gana. HP restante ${foeHP} vs ${myHP}.`,'win'); }
   else logLine(`Ronda ${G.round}: empate técnico (${myHP} vs ${foeHP}).`,'win');
@@ -1489,7 +1531,7 @@ function finishRound(result, myColorSide){
   G.round++;
   G.income+=80;
   toast(iWon===true?'Ronda ganada':iWon===false?'Ronda perdida':'Empate');
-  G._nrTimer=setTimeout(()=>{ if(G.phase!=='between') return; newRound(false); $('phaseNote').textContent=`Ronda ${G.round}. +${G.income}◈ de ingreso. Supervivientes dañados en campo.`; }, 1400);
+  G._nrTimer=setTimeout(()=>{ if(G.phase!=='between') return; newRound(false); showBanner('RONDA '+G.round,'info',`+${G.income}◈ de ingreso`); $('phaseNote').textContent=`Ronda ${G.round}. +${G.income}◈ de ingreso. Supervivientes dañados en campo.`; }, 1400);
 }
 
 /* ---------- Unit info modal ---------- */
