@@ -86,4 +86,20 @@ function makeNetPair() {
   el(gl, 'playerName').value = 'G'; el(gl, 'joinCode').value = code; gl.api.joinRoom(); clock.advance(100);
   return { host: hl.api, guest: gl.api, hl, gl, clock, net, log, code, el };
 }
-module.exports = { makePair, handshake, makeNetPair };
+// N máquinas independientes sobre la MISMA red PeerJS falsa y el mismo reloj (para matchmaking).
+const MM_NAMES = NAMES.concat(['mmStart','mmStop','mmCancel','mmRestart','MM','startMatch']);
+function makeCrowd(n, opts = {}) {
+  const { makeNet } = require('./fakepeer');
+  const clock = makeClock(); const net = makeNet(clock);
+  const sb = { setTimeout: clock.setTimeout, clearTimeout: clock.clearTimeout, setInterval: clock.setInterval, clearInterval: clock.clearInterval, Peer: net.Peer, navigator: {}, performance: { now: () => clock.now } };
+  const ms = [];
+  const add = (name) => {
+    const l = loadGame(MM_NAMES, { ...sb });
+    l.ctx.document.getElementById('playerName').value = name;
+    const m = { name, api: l.api, ctx: l.ctx, G: l.api.G, MM: l.api.MM };
+    ms.push(m); return m;
+  };
+  for (let i = 0; i < n; i++) add('P' + i);
+  return { ms, clock, net, add, run: (ms_) => clock.advance(ms_) };
+}
+module.exports = { makePair, handshake, makeNetPair, makeCrowd };

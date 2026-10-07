@@ -210,7 +210,7 @@
   .rp-info b{color:var(--ink);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .rp-info span{color:var(--ink-dim);font-size:11px}
   .rp-row button{width:auto;margin:0;padding:8px 12px;flex:0 0 auto}
-  #replayCard.hide{display:none}
+  .card.hide{display:none}
   .replaybar{display:none;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:12px}
   .replaybar button{width:auto;margin:0;padding:8px 14px;flex:0 0 auto}
   .replaybar input[type=range]{flex:1 1 160px;min-width:120px;accent-color:var(--phos)}
@@ -278,8 +278,17 @@
 <section class="screen active" id="scrLobby">
   <label class="fld">NOMBRE DE COMANDANTE</label>
   <input type="text" id="playerName" maxlength="14" placeholder="escribí tu nombre" autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="done">
-  <div class="lobby-grid" style="margin-top:20px">
-    <div class="card">
+  <div class="card" id="cardSearch" style="margin-top:20px">
+    <h2>BUSCAR PARTIDA</h2>
+    <p class="hint">Entrás a una cola abierta: si otro jugador está buscando, la partida arranca sola. Sin códigos.</p>
+    <button id="btnSearch">BUSCAR PARTIDA RÁPIDA</button>
+    <div id="mmBox" hidden>
+      <div class="phase-note" id="mmStatus" style="white-space:pre-line"></div>
+      <button class="danger" id="btnSearchCancel">CANCELAR BÚSQUEDA</button>
+    </div>
+  </div>
+  <div class="lobby-grid" style="margin-top:18px">
+    <div class="card" id="cardCreate">
       <h2>CREAR PARTIDA</h2>
       <p class="hint">Generás un código de sala y se lo pasás a tu rival. Esperás a que se una.</p>
       <button id="btnCreate">CREAR SALA</button>
@@ -290,7 +299,7 @@
         <div class="phase-note" id="createWait">Esperando oponente…</div>
       </div>
     </div>
-    <div class="card">
+    <div class="card" id="cardJoin">
       <h2>UNIRSE</h2>
       <p class="hint">Pegá el código que te pasaron y entrás a la sala.</p>
       <label class="fld">CÓDIGO DE SALA</label>
@@ -486,18 +495,21 @@ function wireHostPeer(pr, onError){
   pr.on('disconnected', ()=>{ setTimeout(()=>{ if(G.peer===pr && pr.disconnected && !pr.destroyed){ try{ pr.reconnect(); }catch(_){} } },2000); });
   pr.on('error', onError||(()=>{}));
 }
+// PeerJS comes from a CDN: if it is blocked/offline, say so instead of throwing
+function peerOk(){ if(typeof Peer!=='undefined') return true; toast('No se pudo cargar PeerJS: revisá tu conexión y recargá'); setChip(false,'SIN RED'); return false; }
+function startHosting(code,onError){ G.code=code; G.peer=new Peer(PREFIX+code); wireHostPeer(G.peer,onError); return G.peer; }
 function hostCreate(){
   const name=$('playerName').value.trim();
   if(!name){ toast('Poné tu nombre primero'); return; }
+  if(!peerOk()) return;
   G.name=name; G.isHost=true;
   $('replayCard').classList.add('hide');
-  const code=randCode(); G.code=code;
+  const code=randCode();
   $('roomCode').textContent=code;
   $('createBox').style.display='block';
   $('btnCreate').disabled=true;
   setChip(false,'INICIANDO…');
-  G.peer=new Peer(PREFIX+code);
-  wireHostPeer(G.peer, e=>{
+  startHosting(code, e=>{
     if(e.type==='unavailable-id'){ $('roomCode').textContent=randCode(); /*retry*/ hostRetry(); }
     else { toast('Error de red: '+e.type); setChip(false,'ERROR'); $('btnCreate').disabled=false; }
   });
@@ -527,19 +539,25 @@ function joinRoom(){
   if(!name){ toast('Poné tu nombre primero'); return; }
   const code=$('joinCode').value.trim().toUpperCase();
   if(code.length<4){ toast('Código inválido'); return; }
+  if(!peerOk()) return;
   G.name=name; G.isHost=false; G.code=code;
   $('replayCard').classList.add('hide');
   $('joinStatus').textContent='Conectando…';
   $('btnJoin').disabled=true;
   setChip(false,'CONECTANDO');
+  startJoin(code,joinFailed);
+}
+// connect to a room as guest; `fail(reason)` is called on error/timeout (manual join and matchmaking differ in what to do)
+function startJoin(code,fail){
+  G.isHost=false; G.code=code;
   G.peer=new Peer();
   G.peer.on('open',()=>{
     const c=G.peer.connect(PREFIX+code,{reliable:true});
     G.conn=c; wireConn(c);
     clearTimeout(G._joinT);
-    G._joinT=setTimeout(()=>{ if(G.conn===c && !c.open){ joinFailed('tiempo de espera agotado'); } },15000);
+    G._joinT=setTimeout(()=>{ if(G.conn===c && !c.open){ fail('tiempo de espera agotado'); } },15000);
   });
-  G.peer.on('error', e=>joinFailed(e.type));
+  G.peer.on('error', e=>fail(e.type));
 }
 function joinFailed(why){
   if(G.phase!=='lobby') return;
@@ -644,6 +662,7 @@ function giveUpReconnect(){
   $('btnLobby').style.display='';
 }
 function leaveToLobby(){
+  mmStop();
   stopHeartbeat(); stopPlayback(); keepAwake(false); endReconnect(); stopPlanTimer();
   const c=G.conn, pr=G.peer;
   G.conn=null; G.peer=null;                       // detach first so close events are ignored
@@ -715,6 +734,144 @@ function onData(m){
   }
 }
 
+/* ---------- Matchmaking without a server ----------
+   Only the public PeerJS signaling service (already used for rooms) is involved. A few well-known
+   "mailbox" peer ids exist: ironsiege-v1-q-0 … q-(MM_SLOTS-1). To search, a player tries to CLAIM mailbox 0:
+   - claim succeeds  -> nobody was waiting: this player waits there (host role);
+   - id is taken     -> someone is waiting: dial them as guest.
+   The waiting player then creates a normal private room and sends its code through the mailbox connection;
+   the guest joins that room and the mailbox is released a moment later, so a mailbox is only ever held while
+   somebody waits (or for ~2s while pairing). Everything after that is the usual room flow (token, reconnect...).
+   Races and stale state are handled by trying mailboxes in order, a "busy" reply, dial timeouts (dead
+   owners), and by waiters on mailbox >0 periodically re-scanning from 0 so two waiters can never be stuck apart. */
+const MM_SLOTS=6, MM_PREFIX=PREFIX+'q-', MM_DIAL_MS=6000, MM_PAIR_MS=12000, MM_RESCAN_MS=6000, MM_RETRY_SAME=3;
+const MM={on:false,gen:0,peer:null,conn:null,pairing:false,slot:-1,t:[],t0:0,tick:null,retries:{},bad:{},dialSlot:-1};
+const MM_CODE=/^[A-Z0-9]{6}$/;
+function mmTimer(fn,ms){ const id=setTimeout(fn,ms); MM.t.push(id); return id; }
+function mmClearTimers(){ MM.t.forEach(clearTimeout); MM.t=[]; }
+function mmKill(pr){ try{ if(pr) pr.destroy(); }catch(_){} }
+function mmUI(on){
+  for(const id of ['cardCreate','cardJoin','replayCard']){ const e=$(id); if(e) e.classList.toggle('hide',on); }
+  $('btnSearch').hidden=on; $('mmBox').hidden=!on;
+}
+function mmSay(t){ $('mmStatus').textContent=t; }
+function mmTickUI(){
+  if(!MM.on) return;
+  const sec=Math.floor((nowMs()-MM.t0)/1000), mm=Math.floor(sec/60)+':'+String(sec%60).padStart(2,'0');
+  const base = MM.pairing ? 'Rival encontrado, conectando…' : MM.slot>=0 ? 'Esperando en la cola…' : 'Buscando rival…';
+  mmSay(`${base}  ⏱ ${mm}`+(!MM.pairing&&sec>=45?'\nNadie más está buscando ahora. Dejá la búsqueda abierta o invitá a un amigo con CREAR SALA.':''));
+}
+function mmStart(){
+  if(MM.on||G.peer||G.phase!=='lobby') return;
+  const name=$('playerName').value.trim();
+  if(!name){ toast('Poné tu nombre primero'); return; }
+  if(!peerOk()) return;
+  G.name=name; G.isHost=false;
+  MM.on=true; MM.gen++; MM.t0=nowMs(); MM.pairing=false; MM.slot=-1; MM.retries={}; MM.bad={};
+  mmUI(true); setChip(false,'BUSCANDO');
+  clearInterval(MM.tick); MM.tick=setInterval(mmTickUI,1000); mmTickUI();
+  mmTrySlot(0,MM.gen);
+}
+// stop searching (cancel, match found, leaving). Also drops a half-made pairing room.
+function mmStop(){
+  const wasOn=MM.on;
+  MM.on=false; MM.gen++; mmClearTimers(); clearInterval(MM.tick); MM.tick=null;
+  mmKill(MM.peer); MM.peer=null;
+  try{ if(MM.conn) MM.conn.close(); }catch(_){} MM.conn=null;
+  MM.pairing=false; MM.slot=-1;
+  if(wasOn) mmUI(false);
+}
+function mmCancel(){
+  const midPairing=G.phase==='lobby' && G.peer;
+  mmStop();
+  if(midPairing){ clearTimeout(G._joinT); try{ if(G.conn) G.conn.close(); }catch(_){} try{ G.peer.destroy(); }catch(_){} G.conn=null; G.peer=null; G.isHost=false; G.code=''; }
+  setChip(false,'OFFLINE');
+}
+function mmRestart(){                              // e.g. the tab came back from the background
+  if(!MM.on||MM.pairing) return;
+  mmClearTimers(); mmKill(MM.peer); MM.peer=null; MM.slot=-1; MM.gen++; mmTrySlot(0,MM.gen);
+}
+function mmTrySlot(i,gen){
+  if(!MM.on||gen!==MM.gen) return;
+  if(i>=MM_SLOTS){ mmTimer(()=>mmTrySlot(0,gen),2500+Math.random()*2500); return; }    // every mailbox busy: pause, rescan
+  if(MM.bad[i]>nowMs()){ mmTrySlot(i+1,gen); return; }                                // a mailbox that handed out a dead room: skip for a while
+  let done=false;
+  const pr=new Peer(MM_PREFIX+i); MM.peer=pr; MM.slot=-1;
+  pr.on('open',()=>{ if(done||!MM.on||gen!==MM.gen){ mmKill(pr); return; } done=true; MM.slot=i; mmWait(pr,i,gen); });
+  pr.on('error',e=>{
+    if(done||!MM.on||gen!==MM.gen) return;
+    done=true; mmKill(pr);
+    if(e&&e.type==='unavailable-id') mmDial(i,gen);                                       // someone holds it: they are waiting
+    else mmTimer(()=>mmTrySlot(i,gen),2000);                                              // network hiccup: same mailbox again
+  });
+}
+// guest side: dial the waiter of mailbox i
+function mmDial(i,gen){
+  if(!MM.on||gen!==MM.gen) return;
+  const pr=new Peer(); MM.peer=pr; let decided=false;
+  const go=slot=>{ if(decided) return; decided=true; mmKill(pr); mmTimer(()=>mmTrySlot(slot,gen),slot===i?400:150); };
+  const next=()=>go(i+1);
+  const retry=()=>{ MM.retries[i]=(MM.retries[i]||0)+1; go(MM.retries[i]>MM_RETRY_SAME?i+1:i); };   // holder vanished: try to claim it (a few times)
+  pr.on('open',()=>{
+    if(!MM.on||gen!==MM.gen){ decided=true; mmKill(pr); return; }
+    const c=pr.connect(MM_PREFIX+i,{reliable:true}); MM.conn=c;
+    const to=mmTimer(()=>{ if(!decided){ try{ c.close(); }catch(_){} next(); } },MM_DIAL_MS);   // dead owner never answers
+    c.on('open',()=>{ try{ c.send({t:'mm_hello'}); }catch(_){} });
+    c.on('data',m=>{
+      if(decided||!m||typeof m!=='object') return;
+      if(m.t==='mm_room' && typeof m.code==='string' && MM_CODE.test(m.code)){ decided=true; clearTimeout(to); MM.conn=null; MM.dialSlot=i; mmJoinRoom(m.code,gen); }
+      else if(m.t==='mm_busy') next();
+    });
+    c.on('close',()=>{ if(!decided) next(); });
+    c.on('error',()=>{ if(!decided) next(); });
+  });
+  pr.on('error',e=>{ if(e&&e.type==='peer-unavailable') retry(); else next(); });          // peer-unavailable: the holder vanished
+}
+// guest: join the private room the waiter created
+function mmJoinRoom(code,gen){
+  if(!MM.on||gen!==MM.gen) return;
+  mmClearTimers(); mmKill(MM.peer); MM.peer=null; MM.pairing=true; mmTickUI();
+  startJoin(code,()=>mmJoinFail(gen));
+}
+function mmJoinFail(gen){
+  if(!MM.on||gen!==MM.gen) return;
+  clearTimeout(G._joinT);
+  try{ if(G.conn) G.conn.close(); }catch(_){} try{ if(G.peer) G.peer.destroy(); }catch(_){} G.conn=null; G.peer=null;
+  if(MM.dialSlot>=0) MM.bad[MM.dialSlot]=nowMs()+30000;           // that mailbox sent us to a room that does not exist
+  MM.pairing=false; mmTimer(()=>mmTrySlot(0,gen),800);
+}
+// waiter side: hold mailbox i until a guest dials in
+function mmWait(pr,i,gen){
+  mmTickUI();
+  pr.on('disconnected',()=>{ setTimeout(()=>{ if(MM.peer===pr&&!pr.destroyed){ try{ pr.reconnect(); }catch(_){} } },2000); });
+  pr.on('error',()=>{ if(MM.peer===pr&&MM.on&&gen===MM.gen&&!MM.pairing){ mmKill(pr); MM.peer=null; MM.slot=-1; mmTimer(()=>mmTrySlot(0,gen),1500); } });
+  pr.on('connection',c=>{
+    let paired=false;
+    const reply=m=>{ const f=()=>{ try{ c.send(m); }catch(_){} }; c.open?f():c.on('open',f); };
+    const busy=()=>{ reply({t:'mm_busy'}); setTimeout(()=>{ try{ c.close(); }catch(_){} },300); };
+    if(!MM.on||gen!==MM.gen||MM.pairing){ busy(); return; }
+    c.on('data',m=>{
+      if(paired||!m||typeof m!=='object'||m.t!=='mm_hello') return;                       // ignore anything else
+      if(MM.pairing){ busy(); return; }
+      paired=true; MM.pairing=true; mmTickUI();
+      mmHostPair(pr,c,gen,reply);
+    });
+  });
+  // a waiter on a higher mailbox re-scans from 0 now and then, so it can never be stranded away from another waiter
+  if(i>0) mmTimer(()=>{ if(MM.on&&gen===MM.gen&&!MM.pairing){ mmKill(pr); MM.peer=null; MM.slot=-1; mmTrySlot(0,gen); } },MM_RESCAN_MS+Math.random()*2500);
+}
+function mmHostPair(slotPeer,c,gen,reply){
+  const abort=()=>{                                                                         // guest never arrived: keep waiting
+    if(!MM.on||gen!==MM.gen||G.phase!=='lobby') return;
+    clearTimeout(G._joinT); try{ if(G.peer) G.peer.destroy(); }catch(_){} G.peer=null; G.conn=null; G.isHost=false; G.code='';
+    MM.pairing=false; reply({t:'mm_busy'}); mmTickUI();
+  };
+  const code=randCode(); G.isHost=true;
+  const room=startHosting(code,e=>{ if(e&&e.type==='unavailable-id') abort(); });
+  room.on('open',()=>{ if(MM.on&&gen===MM.gen&&G.peer===room) reply({t:'mm_room',code}); });
+  mmTimer(()=>{ if(!(G.conn&&G.conn.open)) abort(); },MM_PAIR_MS);
+}
+
 /* ---------- Match flow ---------- */
 // 'ready' messages carry the round they belong to. Players watch battles at their own
 // local speed, so the rival can finish and confirm round N+1 while we are still
@@ -760,6 +917,7 @@ function applyFoeReady(m){
 }
 function combineSeed(hostPart, guestPart){ return (hostPart ^ Math.imul(guestPart,2654435761)) >>> 0; }
 function startMatch(){
+  if(MM.on) mmStop();                            // matched: release the mailbox, restore lobby cards
   // combined deterministic seed, identical on both machines: the parts MUST be
   // combined in canonical (host, guest) order, never in (me, foe) order.
   G.seed = combineSeed(G.isHost?G.mySeedPart:G.foeSeedPart, G.isHost?G.foeSeedPart:G.mySeedPart);
@@ -2046,6 +2204,8 @@ function esc(s){ return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;',
 $('btnCreate').onclick=hostCreate;
 $('btnJoin').onclick=joinRoom;
 $('btnLobby').onclick=leaveToLobby;
+$('btnSearch').onclick=mmStart;
+$('btnSearchCancel').onclick=mmCancel;
 $('btnReplayOpen').onclick=()=>{ const v=$('replayCode').value; if(!v.trim()){ toast('Pegá un enlace de replay'); return; } replayImport(v); };
 $('rpPlay').onclick=()=>{ if(RP.rec) replayToggle(); };
 $('rpPrev').onclick=()=>{ if(RP.rec) replayLoadRound(RP.round-1,true); };
@@ -2098,6 +2258,7 @@ document.addEventListener('visibilitychange',()=>{
   const inMatch = G.phase!=='lobby' && G.phase!=='over';
   if(document.visibilityState!=='visible'){ if(inMatch) send({t:'away'}); try{ if(AUD.ctx) AUD.ctx.suspend(); }catch(_){} return; }
   try{ if(AUD.ctx && AUD.on) AUD.ctx.resume(); }catch(_){}
+  mmRestart();
   if(inMatch){
     send({t:'back'});
     if(!G.reconnecting && G.conn && !G.conn.open) connectionLost('Se cortó la conexión');

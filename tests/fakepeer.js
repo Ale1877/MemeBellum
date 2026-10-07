@@ -44,7 +44,8 @@ function makeNet(clock) {
       return c;
     }
     reconnect() { this.disconnected = false; }
-    destroy() { this.destroyed = true; peers.delete(this.id); for (const c of conns) if (c.peer === this) c.close(); }
+    destroy() { this.destroyed = true; if (peers.get(this.id) === this) peers.delete(this.id);   // un peer que no logró su id no desregistra al dueño real
+      for (const c of conns) if (c.peer === this) c.close(); }
   }
   net.Peer = FakePeer;
   net.kill = () => { for (const c of [...conns]) c.close(); };                 // se cae la conectividad

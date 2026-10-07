@@ -603,6 +603,70 @@ pending.push((async () => {
          : `la simulación cambió (${saved.hash} → ${hash}). Subí SIM_VERSION (hoy ${api2.SIM_VERSION}) y corré: node tests/run.js --update-fingerprint`);
 }
 
+// (r) matchmaking sin servidor: buzones con ID fijo sobre una red PeerJS falsa con varias máquinas buscando a la vez
+{
+  const { makeCrowd } = require('./net');
+  const fail = [];
+  const phases = c => c.ms.map(m => m.G.phase[0]).join('');
+  const slotsLeft = c => [...c.net.peers.keys()].filter(k => k.startsWith('ironsiege-v1-q-'));
+  const pairsOk = (c, who, label) => {
+    const seeds = {}; for (const m of who) (seeds[m.G.seed] = seeds[m.G.seed] || []).push(m);
+    for (const [seed, grp] of Object.entries(seeds)) {
+      const hosts = grp.filter(m => m.G.isHost).length;
+      if (grp.length !== 2 || hosts !== 1) fail.push(`${label}: grupo con semilla ${seed} mal formado (${grp.length} jugadores, ${hosts} hosts)`);
+    }
+  };
+
+  // 1. dos jugadores buscan a la vez -> se emparejan y la partida arranca; el buzón se libera
+  { const c = makeCrowd(2); c.ms.forEach(m => m.api.mmStart()); c.run(30000);
+    if (phases(c) !== 'pp') fail.push('1: no arrancó la partida (' + phases(c) + ')');
+    pairsOk(c, c.ms, '1');
+    if (c.ms[0].G.foeName === 'RIVAL' || c.ms[0].G.foeName === c.ms[0].G.name) fail.push('1: no intercambiaron nombres');
+    if (slotsLeft(c).length) fail.push('1: quedaron buzones ocupados: ' + slotsLeft(c));
+    if (c.ms.some(m => m.MM.on)) fail.push('1: la búsqueda no se detuvo al emparejar'); }
+  // 2. seis a la vez -> tres partidas
+  { const c = makeCrowd(6); c.ms.forEach(m => m.api.mmStart()); c.run(60000);
+    if (phases(c) !== 'pppppp') fail.push('2: no se emparejaron todos (' + phases(c) + ')');
+    pairsOk(c, c.ms, '2'); if (slotsLeft(c).length) fail.push('2: buzones sin liberar: ' + slotsLeft(c)); }
+  // 3. cinco -> dos partidas y uno sigue buscando; llega un sexto y se juntan
+  { const c = makeCrowd(5); c.ms.forEach(m => m.api.mmStart()); c.run(60000);
+    const playing = c.ms.filter(m => m.G.phase === 'plan'), waiting = c.ms.filter(m => m.G.phase === 'lobby');
+    if (playing.length !== 4 || waiting.length !== 1 || !waiting[0].MM.on) fail.push('3: esperaba 4 jugando y 1 buscando (' + phases(c) + ')');
+    const late = c.add('Tardío'); late.api.mmStart(); c.run(40000);
+    if (late.G.phase !== 'plan' || waiting[0].G.phase !== 'plan' || late.G.seed !== waiting[0].G.seed) fail.push('3: el que llegó tarde no se emparejó con el que esperaba'); }
+  // 4. dueño muerto en el buzón 0 (id registrado que nunca responde): se saltea y se emparejan igual
+  { const c = makeCrowd(2); const zombie = new c.net.Peer('ironsiege-v1-q-0'); c.run(10);
+    c.ms.forEach(m => m.api.mmStart()); c.run(70000);
+    if (phases(c) !== 'pp') fail.push('4: con un buzón zombi no se emparejaron (' + phases(c) + ')'); pairsOk(c, c.ms, '4'); }
+  // 5. espera "varada" en el buzón 1: al liberarse el 0 y llegar otro jugador, el que espera re-escanea y se encuentran
+  { const c = makeCrowd(2); const zombie = new c.net.Peer('ironsiege-v1-q-0'); c.run(10);
+    c.ms[0].api.mmStart(); c.run(9000);
+    if (c.ms[0].MM.slot < 1) fail.push('5: el primero debía quedar esperando en un buzón >0 (slot ' + c.ms[0].MM.slot + ')');
+    zombie.destroy(); c.run(500); c.ms[1].api.mmStart(); c.run(40000);
+    if (phases(c) !== 'pp') fail.push('5: no se encontraron tras liberarse el buzón 0 (' + phases(c) + ')'); }
+  // 6. cancelar libera todo y deja el estado limpio
+  { const c = makeCrowd(1); const m = c.ms[0]; m.api.mmStart(); c.run(3000);
+    if (!slotsLeft(c).length) fail.push('6: no reclamó un buzón al esperar');
+    m.api.mmCancel(); c.run(500);
+    if (slotsLeft(c).length || m.MM.on || m.G.peer || m.G.phase !== 'lobby') fail.push('6: cancelar no limpió (buzones ' + slotsLeft(c) + ', peer ' + !!m.G.peer + ')');
+    m.api.mmStart(); c.run(2000); if (!m.MM.on) fail.push('6: no pudo volver a buscar'); }
+  // 7. entradas hostiles: un mensaje basura no desarma al que espera; un "dueño" que manda códigos falsos no cuelga a nadie
+  { const c = makeCrowd(1); c.ms[0].api.mmStart(); c.run(3000);
+    const evil = new c.net.Peer(); c.run(20);
+    for (const junk of [null, 7, 'x', {}, { t: 'ready' }, { t: 'mm_hello_x' }, { t: 'mm_room', code: '../../etc' }]) { const cn = evil.connect('ironsiege-v1-q-0', {}); c.run(30); cn.send(junk); c.run(30); }
+    if (!c.ms[0].MM.on || c.ms[0].MM.slot !== 0 || c.ms[0].MM.pairing) fail.push('7: basura desarmó al que espera (slot ' + c.ms[0].MM.slot + ', pairing ' + c.ms[0].MM.pairing + ')');
+    c.ms[0].api.mmCancel(); c.run(200); }
+  { const c = makeCrowd(2);
+    const liar = new c.net.Peer('ironsiege-v1-q-0'); c.run(10);
+    liar.on('connection', cn => cn.on('open', () => cn.send({ t: 'mm_room', code: 'AAAAAA' })));   // código con formato válido pero sala inexistente
+    c.ms.forEach(m => m.api.mmStart()); c.run(90000);
+    if (phases(c) !== 'pp') fail.push('7b: un buzón mentiroso impidió el emparejamiento (' + phases(c) + ')'); }
+  // 8. la partida emparejada es una partida normal: simulan igual
+  { const c = makeCrowd(2); c.ms.forEach(m => m.api.mmStart()); c.run(30000);
+    const [a, b] = c.ms; if (a.G.seed !== b.G.seed || a.G.seed === 0) fail.push('8: semillas distintas'); if (a.G.token !== b.G.token || !a.G.token) fail.push('8: sin token compartido'); }
+  check('matchmaking: emparejar, carreras, zombis, esperas varadas, cancelar y entradas hostiles', fail.length === 0, fail.join('; '));
+}
+
 // --report: tabla de winrates entre todos los tipos y unidades
 if (process.argv.includes('--report')) {
   console.log('\nTriángulo por presupuesto (% victorias del que debería ganar):');
