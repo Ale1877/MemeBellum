@@ -529,6 +529,10 @@ pending.push((async () => {
     const x = H.simulate(r.hd, r.gd, r.ht, r.gt, r.seed), played = p.log.host[k];
     if (x.winner !== r.w || x.winner !== played.winner || x.hostHP !== played.hostHP || x.guestHP !== played.guestHP) fail.push(`ronda ${k + 1}: la re-simulación difiere de lo jugado`);
   });
+  // el texto de la lista de replays muestra la vida de base final (no rondas ganadas)
+  { const sum = rh.rounds.reduce((a, r) => [a[0] + r.bd[0], a[1] + r.bd[1]], [0, 0]);
+    const want = `BASE ${Math.max(0, 1000 - sum[0])}–${Math.max(0, 1000 - sum[1])} · ${rh.rounds.length} rondas`;
+    if (H.replayResultText(rh) !== want) fail.push(`replayResultText: "${H.replayResultText(rh)}" (esperado "${want}")`); }
   // se guardó en el almacenamiento y sobrevive al saneamiento sin cambios
   const stored = H.replaysLoad();
   if (stored.length !== 1 || stored[0].rounds.length !== rh.rounds.length) fail.push('no quedó guardado en localStorage');

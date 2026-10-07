@@ -223,6 +223,17 @@
   body.replaying .stat.cred{display:none !important}
   @media (max-width:600px){ .replaybar #rpSeek{order:9;flex-basis:100%} .rp-row{flex-wrap:wrap} }
 
+
+  /* ---------- Base HP bars + help ---------- */
+  .basebar{height:3px;width:100%;min-width:64px;background:var(--line);margin-top:3px;overflow:hidden}
+  .basebar i{display:block;height:100%;background:var(--phos);transform-origin:left;transition:transform .6s ease-out}
+  .basebar.foe i{background:var(--red)}
+  .help-btn{width:auto;margin:0;padding:6px 14px;font-size:14px;letter-spacing:0;min-width:40px}
+  .help h3{font-family:var(--disp);font-size:13px;letter-spacing:2px;color:var(--amber);margin:14px 0 4px}
+  .help p,.help li{font-size:12px;line-height:1.6;color:var(--ink)}
+  .help ul{margin:4px 0 0 18px}
+  .help .tri{display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:12px;margin-top:4px}
+  .help .tri b{color:var(--phos)}
   /* ---------- Unit unlocks ---------- */
   .unlock-info{font-size:11px;color:var(--ink-dim);letter-spacing:1px;margin-top:12px}
   .offer{margin-top:12px;border-color:var(--amber);animation:fadeIn .35s ease-out}
@@ -291,7 +302,7 @@
     <div class="logo">IRON <b>SIEGE</b></div>
     <div class="sub">TACTICAL MECH AUTOBATTLER // P2P</div>
   </div>
-  <div class="status-chip" id="netChip">OFFLINE</div>
+  <div style="display:flex;gap:8px;align-items:center"><button class="ghost help-btn" id="btnHelp" aria-label="Cómo jugar">?</button><div class="status-chip" id="netChip">OFFLINE</div></div>
 </header>
 
 <!-- ============ LOBBY ============ -->
@@ -355,8 +366,8 @@
       <div class="stat"><span class="lbl">RONDA</span><b id="hRound">1</b></div>
       <div class="stat cred"><span class="lbl">CRÉDITOS</span><b id="hGold">0</b></div>
       <div class="stat cred"><span class="lbl">INGRESO/RONDA</span><b id="hInc">0</b></div>
-      <div class="stat"><span class="lbl" id="lblWinMe">MI BASE</span><b id="hWinMe">0</b></div>
-      <div class="stat"><span class="lbl" id="lblWinFoe">BASE RIVAL</span><b id="hWinFoe" style="color:var(--red)">0</b></div>
+      <div class="stat"><span class="lbl" id="lblWinMe">MI BASE</span><b id="hWinMe">0</b><div class="basebar"><i id="bbMe"></i></div></div>
+      <div class="stat"><span class="lbl" id="lblWinFoe">BASE RIVAL</span><b id="hWinFoe" style="color:var(--red)">0</b><div class="basebar foe"><i id="bbFoe"></i></div></div>
     </div>
     <div class="vs-tag"><span class="me" id="tagMe">YO</span> VS <span class="foe" id="tagFoe">RIVAL</span></div>
   </div>
@@ -1181,6 +1192,7 @@ function newRound(first){
 const hudLast={};
 function setStat(id,v){
   const el=$(id);
+  if(id==='hWinMe'||id==='hWinFoe'){ const bar=$(id==='hWinMe'?'bbMe':'bbFoe'); if(bar) bar.style.transform='scaleX('+Math.max(0,Math.min(1,v/BASE_HP)).toFixed(3)+')'; }   // base HP bar (composited transform)
   if(hudLast[id]!==v){ const first=hudLast[id]===undefined; hudLast[id]=v; el.textContent=v; if(!first){ el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump'); } }
 }
 function updateHUD(){
@@ -2364,6 +2376,11 @@ function replayClose(){
 }
 
 /* --- lobby list --- */
+// "BASE 640–0": final base HP of both players, from the recorded damage to each base
+function replayResultText(rec){
+  let h=BASE_HP,g=BASE_HP; for(const r of rec.rounds){ const b=r.bd||[0,0]; h=Math.max(0,h-b[0]); g=Math.max(0,g-b[1]); }
+  return `BASE ${h}–${g} · ${rec.rounds.length} rondas`;
+}
 function replayListRender(){
   const box=$('replayList'); if(!box) return;
   box.textContent='';
@@ -2375,7 +2392,7 @@ function replayListRender(){
     const info=document.createElement('div'); info.className='rp-info';
     const when=rec.t?new Date(rec.t).toLocaleString([], {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'';
     const t1=document.createElement('b'); t1.textContent=`${rec.host} vs ${rec.guest}`;
-    const t2=document.createElement('span'); t2.textContent=`${rec.score[0]}–${rec.score[1]} · ${rec.rounds.length} rondas · ${when}`;
+    const t2=document.createElement('span'); t2.textContent=`${replayResultText(rec)} · ${when}`;
     info.appendChild(t1); info.appendChild(t2); row.appendChild(info);
     for(const [label,fn,cls] of [['VER',()=>replayOpen(rec)],['↗',()=>shareReplay(rec)],['✕',()=>{ replayDelete(rec.id); replayListRender(); },'danger']]){
       const b=document.createElement('button'); b.textContent=label; b.className=cls||'ghost'; b.onclick=fn; row.appendChild(b);
@@ -2451,6 +2468,30 @@ function openUnitModal(k){
     </div>`;
   $('modalBg').classList.add('show');
 }
+/* ---------- How to play ---------- */
+function openHelp(){
+  const t=TYPE_LABEL;
+  $('modalContent').innerHTML=`<div class="help">
+    <div class="m-name">CÓMO JUGAR</div>
+    <h3>OBJETIVO</h3>
+    <p>Cada jugador tiene una <b>base de ${BASE_HP} puntos</b>. Gana quien destruye la base rival. Si pasan ${MAX_ROUNDS} rondas gana quien tenga más vida de base.</p>
+    <h3>CADA RONDA</h3>
+    <ul>
+      <li><b>Desbloqueá</b> (desde la ronda 2): elegís <b>1 de 3</b> unidades bloqueadas. Empezás con ${STARTERS.map(i=>UNITS[i].name).join(', ')}.</li>
+      <li><b>Desplegá</b> mechas con tus créditos ◈, <b>movelos</b>, <b>fusioná</b> dos iguales (+1 nivel) o investigá una <b>tecnología</b>.</li>
+      <li>Confirmá <b>LISTO</b> (o se confirma solo al acabarse el tiempo). El combate se simula y se ve en pantalla.</li>
+      <li>El que pierde la ronda recibe daño en su base según las unidades que le quedaron vivas al ganador.</li>
+      <li><b>Todo tu ejército reaparece a pleno HP</b> en la ronda siguiente. Los créditos crecen cada ronda.</li>
+    </ul>
+    <h3>CONTRAS</h3>
+    <div class="tri"><b>${t.swarm}</b> vence a <b>${t.heavy}</b> · <b>${t.heavy}</b> vence a <b>${t.ranged}</b> · <b>${t.ranged}</b> vence a <b>${t.swarm}</b>. El <b>${t.assault}</b> es generalista.</div>
+    <p style="margin-top:6px">Tocá <b>ℹ</b> en cualquier unidad para ver sus stats y su tecnología. Mirá el despliegue del rival de la ronda anterior en la mitad de arriba.</p>
+    <h3>MODOS</h3>
+    <p>Buscar partida rápida · jugar con un amigo con un código o enlace · práctica contra un bot · ver replays de tus partidas.</p>
+  </div>`;
+  $('modalBg').classList.add('show');
+  try{ localStorage.setItem('ironsiege.helpSeen','1'); }catch(_){}
+}
 function closeModal(){ $('modalBg').classList.remove('show'); }
 
 /* ---------- utils ---------- */
@@ -2460,6 +2501,9 @@ function esc(s){ return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;',
 $('btnCreate').onclick=hostCreate;
 $('btnJoin').onclick=joinRoom;
 $('btnLobby').onclick=leaveToLobby;
+$('btnHelp').onclick=openHelp;
+// first visit: show the rules once (it is a game with a lot of new mechanics)
+try{ if(!localStorage.getItem('ironsiege.helpSeen') && !/^#replay=/.test(location.hash) && !navigator.webdriver) setTimeout(openHelp,600); }catch(_){}   // (not under automation: it would cover the page)
 try{ const n=localStorage.getItem('ironsiege.name'); if(n&&!$('playerName').value) $('playerName').value=cleanName(n,''); }catch(_){}
 $('playerName').addEventListener('input',e=>{ try{ localStorage.setItem('ironsiege.name',e.target.value.trim().slice(0,14)); }catch(_){} });
 $('btnSearch').onclick=mmStart;
