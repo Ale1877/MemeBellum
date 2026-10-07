@@ -92,7 +92,7 @@ function makeNetPair(opts = {}) {
   return { host: hl.api, guest: gl.api, hl, gl, clock, net, log, code, el };
 }
 // N máquinas independientes sobre la MISMA red PeerJS falsa y el mismo reloj (para matchmaking).
-const MM_NAMES = NAMES.concat(['mmStart','mmStop','mmCancel','mmRestart','MM','startMatch','hostCreate','joinRoom','NET_VERSION']);
+const MM_NAMES = NAMES.concat(['mmStart','mmStop','mmCancel','mmRestart','MM','startMatch','hostCreate','joinRoom','NET_VERSION','startBotMatch','botNew','botTurn','confirmReady','requestRematch','leaveToLobby','matchOutcome']);
 function makeCrowd(n, opts = {}) {
   const { makeNet } = require('./fakepeer');
   const clock = makeClock(); const net = makeNet(clock);

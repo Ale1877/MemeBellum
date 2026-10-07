@@ -35,7 +35,8 @@ Se publica como sitio estático (Cloudflare Pages). Ver `README.md` para la arqu
 Secciones del `<script>` (buscar `/* ---------- `): RNG → UNITS/TYPE_ADV → estado `G` → red/reconexión/matchmaking →
 flujo de partida/tienda/despliegue → renderizador y efectos → audio → **Simulación** → reproducción → resumen → replays → modal.
 Tests: `tests/run.js` (suite), `load.js` (carga el script con DOM falso), `net.js`+`fakepeer.js`+`fakeaudio.js` (máquinas simuladas),
-`balance.js` (métricas), `perf.js`/`mobile-smoke.js` (Playwright). Herramienta: `tools/balance-search.js`.
+`balance.js` (métricas), `perf.js`/`mobile-smoke.js` (Playwright). Herramientas: `tools/balance-search.js` (constantes de balance), `tools/match-sim.js` (partidas bot-vs-bot para medir el ritmo).
+El bot (`botTurn`, sección *Practice bot*) debe seguir las mismas reglas que un humano y entrar por `onFoeReady`; usa su propio rng.
 
 ## Trampas conocidas
 - `G.phase` gobierna qué mensajes de red se aplican (`lobby|plan|battle|between|over|replay`); un `ready` adelantado se bufferea.

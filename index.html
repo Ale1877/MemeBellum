@@ -307,6 +307,11 @@
       <button class="danger" id="btnSearchCancel">CANCELAR BÚSQUEDA</button>
     </div>
   </div>
+  <div class="card" id="cardBot" style="margin-top:18px">
+    <h2>PRÁCTICA VS BOT</h2>
+    <p class="hint">Jugá solo contra un bot que sigue las mismas reglas (desbloqueos, vida de base). Sirve para aprender y probar estrategias.</p>
+    <button class="ghost" id="btnBot">JUGAR VS BOT</button>
+  </div>
   <div class="section-title" id="friendsLbl">JUGAR CON UN AMIGO · 1v1 PRIVADO</div>
   <p class="section-hint" id="friendsHint">Creá una sala y pasale el enlace o el código a tu amigo; quien reciba el enlace solo toca UNIRSE.</p>
   <div class="lobby-grid" style="margin-top:0">
@@ -503,7 +508,7 @@ const G = {
   round:1, gold:0, income:INCOME_START,
   winsMe:0, winsFoe:0,    // rounds won (statistics / replays)
   unlocked:new Set(STARTERS), foeUnlocked:new Set(STARTERS), offer:[], unlockPicked:null,   // unit unlocks (me / rival) and this round's offer
-  baseMe:BASE_HP, baseFoe:BASE_HP, matchEnded:false,   // base HP: the match ends when one reaches 0
+  baseMe:BASE_HP, baseFoe:BASE_HP, matchEnded:false, bot:null,   // bot: practice opponent (null in online matches)   // base HP: the match ends when one reaches 0
   myDeploy:[],          // units I field: {id,x,y,lvl}
   myPending:[],         // actions this round (for undo): {kind,...}
   myTech:{},            // {unitId:true} techs I've researched
@@ -553,7 +558,7 @@ function hostCreate(){
   if(!name){ toast('Poné tu nombre primero'); return; }
   if(!peerOk()) return;
   G.name=name; G.isHost=true;
-  $('replayCard').classList.add('hide'); $('cardSearch').classList.add('hide');
+  $('replayCard').classList.add('hide'); $('cardSearch').classList.add('hide'); $('cardBot').classList.add('hide');
   const code=randCode();
   $('roomCode').textContent=code;
   $('createBox').style.display='block';
@@ -591,7 +596,7 @@ function joinRoom(){
   if(code.length<4){ toast('Código inválido'); return; }
   if(!peerOk()) return;
   G.name=name; G.isHost=false; G.code=code;
-  $('replayCard').classList.add('hide'); $('cardSearch').classList.add('hide');
+  $('replayCard').classList.add('hide'); $('cardSearch').classList.add('hide'); $('cardBot').classList.add('hide');
   $('joinStatus').textContent='Conectando…';
   $('btnJoin').disabled=true;
   setChip(false,'CONECTANDO');
@@ -614,7 +619,7 @@ function joinFailed(why){
   clearTimeout(G._joinT);
   $('joinStatus').textContent='No se pudo conectar ('+why+')';
   setChip(false,'ERROR');
-  $('btnJoin').disabled=false; $('replayCard').classList.remove('hide'); $('cardSearch').classList.remove('hide');
+  $('btnJoin').disabled=false; $('replayCard').classList.remove('hide'); $('cardSearch').classList.remove('hide'); $('cardBot').classList.remove('hide');
   try{ if(G.conn) G.conn.close(); }catch(_){}
   try{ if(G.peer) G.peer.destroy(); }catch(_){}
   G.conn=null; G.peer=null;
@@ -712,7 +717,7 @@ function giveUpReconnect(){
   $('btnLobby').style.display='';
 }
 function leaveToLobby(){
-  mmStop();
+  mmStop(); G.bot=null;
   stopHeartbeat(); stopPlayback(); keepAwake(false); endReconnect(); stopPlanTimer();
   const c=G.conn, pr=G.peer;
   G.conn=null; G.peer=null;                       // detach first so close events are ignored
@@ -725,7 +730,7 @@ function leaveToLobby(){
   $('log').innerHTML='';
   hideSummary();
   $('createBox').style.display='none';
-  $('btnCreate').disabled=false; $('btnJoin').disabled=false; $('replayCard').classList.remove('hide'); $('cardSearch').classList.remove('hide'); replayListRender();
+  $('btnCreate').disabled=false; $('btnJoin').disabled=false; $('replayCard').classList.remove('hide'); $('cardSearch').classList.remove('hide'); $('cardBot').classList.remove('hide'); replayListRender();
   $('joinStatus').textContent='';
   $('btnLobby').style.display='none';
   setChip(false,'OFFLINE');
@@ -820,7 +825,7 @@ function mmTimer(fn,ms){ const id=setTimeout(fn,ms); MM.t.push(id); return id; }
 function mmClearTimers(){ MM.t.forEach(clearTimeout); MM.t=[]; }
 function mmKill(pr){ try{ if(pr) pr.destroy(); }catch(_){} }
 function mmUI(on){
-  for(const id of ['cardCreate','cardJoin','replayCard','friendsLbl','friendsHint']){ const e=$(id); if(e) e.classList.toggle('hide',on); }
+  for(const id of ['cardCreate','cardJoin','replayCard','friendsLbl','friendsHint','cardBot']){ const e=$(id); if(e) e.classList.toggle('hide',on); }
   $('btnSearch').hidden=on; $('mmBox').hidden=!on;
 }
 function mmSay(t){ $('mmStatus').textContent=t; }
@@ -828,7 +833,7 @@ function mmTickUI(){
   if(!MM.on) return;
   const sec=Math.floor((nowMs()-MM.t0)/1000), mm=Math.floor(sec/60)+':'+String(sec%60).padStart(2,'0');
   const base = MM.pairing ? 'Rival encontrado, conectando…' : MM.slot>=0 ? 'Esperando en la cola…' : 'Buscando rival…';
-  mmSay(`${base}  ⏱ ${mm}`+(!MM.pairing&&sec>=45?'\nNadie más está buscando ahora. Dejá la búsqueda abierta o invitá a un amigo con CREAR SALA.':''));
+  mmSay(`${base}  ⏱ ${mm}`+(!MM.pairing&&sec>=45?'\nNadie más está buscando ahora. Dejá la búsqueda abierta, invitá a un amigo con CREAR SALA, o cancelá y probá PRÁCTICA VS BOT.':''));
 }
 function mmStart(){
   if(MM.on||G.peer||G.phase!=='lobby') return;
@@ -943,6 +948,67 @@ function mmHostPair(slotPeer,c,gen,reply){
   mmTimer(()=>{ if(!(G.conn&&G.conn.open)) abort(); },MM_PAIR_MS);
 }
 
+/* ---------- Practice bot ----------
+   A bot opponent that plays by the SAME rules as a human: it only unlocks what it is offered, only deploys what it
+   has unlocked and can afford, and its 'ready' goes through the same validation as a network rival's. The decision
+   logic is pure (state in, state out) so tools/match-sim.js can play thousands of bot-vs-bot matches headlessly to
+   measure pacing. It uses its own rng, never the simulation's. */
+const BOT_NAME='BOT';
+function botNew(){ return {gold:0,unlocked:new Set(STARTERS),deploy:[],tech:{},intel:null}; }
+// share of the rival's army (weighted by value) in each type
+function botTypeMix(deploy){
+  const mix={swarm:0,heavy:0,ranged:0,assault:0}; let tot=0;
+  for(const d of deploy||[]){ const u=UNITS[d.id]; if(!u) continue; const w=u.cost*Math.pow(2,(d.lvl||1)-1); mix[u.type]+=w; tot+=w; }
+  if(tot>0) for(const t in mix) mix[t]/=tot;
+  return {mix,tot};
+}
+// expected type multiplier of unit `u` against a rival army with that type mix (TYPE_ADV is the contra table)
+function botScore(u,mix){ let s=0; const row=TYPE_ADV[u.type]||{}; for(const t in mix) s+=mix[t]*(row[t]||1); return s; }
+function botPickUnlock(bs,offer,rng){
+  const {mix,tot}=botTypeMix(bs.intel);
+  let best=offer[0], top=-1;
+  for(const id of offer){ const sc=(tot?botScore(UNITS[id],mix):1)*(0.85+0.3*rng()); if(sc>top){ top=sc; best=id; } }
+  return best;
+}
+function botPlace(id,rng){                         // heavies up front, ranged at the back, the rest in between
+  const u=UNITS[id], band=u.type==='heavy'?[.56,.68]:u.type==='ranged'?[.80,.94]:[.64,.86];
+  return {id,lvl:1,x:q1(60+rng()*880),y:q1(G.H*(band[0]+(band[1]-band[0])*rng()))};
+}
+// spend all the gold: units weighted by how well their type counters the rival's last army, spread over what it owns
+function botSpend(bs,rng){
+  const {mix,tot}=botTypeMix(bs.intel);
+  // sometimes research a tech for the unit it fields most (before spending on new units)
+  const counts={}; for(const d of bs.deploy) counts[d.id]=(counts[d.id]||0)+1;
+  const owned=Object.keys(counts).filter(id=>!bs.tech[id]&&UNITS[id].tech.cost<=bs.gold).sort((a,b)=>counts[b]-counts[a]);
+  if(owned.length && counts[owned[0]]>=2 && rng()<0.4){ bs.gold-=UNITS[owned[0]].tech.cost; bs.tech[owned[0]]=true; }
+  for(let guard=0;guard<120;guard++){
+    const afford=[...bs.unlocked].filter(id=>UNITS[id].cost<=bs.gold);
+    if(!afford.length) break;
+    let tw=0; const ws=afford.map(id=>{ const own=bs.deploy.filter(d=>d.id===id).length; const w=Math.pow(tot?botScore(UNITS[id],mix):1,2.5)/(1+0.35*own); tw+=w; return w; });
+    let r=rng()*tw, pick=afford[afford.length-1];
+    for(let i=0;i<afford.length;i++){ r-=ws[i]; if(r<=0){ pick=afford[i]; break; } }
+    bs.gold-=UNITS[pick].cost; bs.deploy.push(botPlace(pick,rng));
+  }
+}
+// one planning turn: add income, take an unlock offer, spend. Returns the 'ready' message the bot "sends".
+function botTurn(bs,round,income,seed,side){
+  side=side||'guest';
+  const rng=makeRNG((seed ^ (side==='host'?0xB07B07:0x5EED5) ^ Math.imul(round,2654435761))>>>0);
+  bs.gold += income;
+  const offer=unlockOffer(side,round,bs.unlocked); let un=null;
+  if(offer.length){ un=botPickUnlock(bs,offer,rng); bs.unlocked.add(un); }
+  botSpend(bs,rng);
+  return {t:'ready',round,deploy:cloneJSON(bs.deploy),tech:Object.assign({},bs.tech),unlock:un};
+}
+function startBotMatch(){
+  if(MM.on||G.peer||G.phase!=='lobby') return;
+  const name=$('playerName').value.trim();
+  if(!name){ toast('Poné tu nombre primero'); return; }
+  G.name=name; G.isHost=true; G.foeName=BOT_NAME; G.bot=botNew();
+  G.mySeedPart=(Math.random()*1e9)|0; G.foeSeedPart=(Math.random()*1e9)|0;
+  startMatch();
+}
+
 /* ---------- Match flow ---------- */
 // 'ready' messages carry the round they belong to. Players watch battles at their own
 // local speed, so the rival can finish and confirm round N+1 while we are still
@@ -1007,6 +1073,7 @@ function startMatch(){
   // combined in canonical (host, guest) order, never in (me, foe) order.
   G.seed = combineSeed(G.isHost?G.mySeedPart:G.foeSeedPart, G.isHost?G.foeSeedPart:G.mySeedPart);
   G.unlocked=new Set(STARTERS); G.foeUnlocked=new Set(STARTERS); G.offer=[]; G.unlockPicked=null;
+  if(G.bot) G.bot=botNew();                       // fresh bot for a (re)started practice match
   G.round=1; G.income=INCOME_START; G.gold=G.income; G.winsMe=0; G.winsFoe=0; G.baseMe=BASE_HP; G.baseFoe=BASE_HP; G.matchEnded=false;
   G.myDeploy=[]; G.myPending=[]; G.myTech={}; G.foeTech={}; G.pendingReady=null; G.sentReady=null; G.foeAway=false; endReconnect();
   recStart();
@@ -1018,7 +1085,7 @@ function startMatch(){
   hideSummary();
   fitCanvas();
   $('btnLobby').style.display='none';
-  startHeartbeat();
+  if(!G.bot) startHeartbeat();                    // nobody to ping in a practice match
   keepAwake(true);
   buildShop();
   newRound(true);
@@ -1028,7 +1095,7 @@ function startMatch(){
 /* ---------- Rematch ---------- */
 // Both players must ask; then the host sends fresh seed material and both machines restart the match
 // over the same connection (no lobby, no new room code).
-function canRematch(){ return G.phase==='over' && !G.reconnecting && G.conn && G.conn.open && G.matchEnded; }
+function canRematch(){ return G.phase==='over' && G.matchEnded && (G.bot || (!G.reconnecting && G.conn && G.conn.open)); }
 function updateRematchBtn(){
   const b=$('btnRematch'); if(!b) return;
   b.hidden=!canRematch();
@@ -1037,6 +1104,7 @@ function updateRematchBtn(){
 }
 function requestRematch(){
   if(!canRematch()||G.rematchMe) return;
+  if(G.bot){ G.mySeedPart=(Math.random()*1e9)|0; G.foeSeedPart=(Math.random()*1e9)|0; startMatch(); return; }   // the bot always accepts
   G.rematchMe=true; send({t:'rematch'}); updateRematchBtn(); maybeStartRematch();
 }
 function maybeStartRematch(){
@@ -1105,6 +1173,9 @@ function newRound(first){
   // rival already confirmed this round while we were still watching the last battle
   const pr=G.pendingReady; G.pendingReady=null;
   if(pr && pr.round===G.round) applyFoeReady(pr);
+  if(G.bot){                                     // practice bot plans now and 'sends' its ready through the normal validation
+    onFoeReady(botTurn(G.bot,G.round,first?INCOME_START:G.income,G.seed));
+  }
 }
 
 const hudLast={};
@@ -1840,6 +1911,7 @@ function tryResolve(){
   const guestDeploy= G.isHost ? G.foeDeploy : G.myDeploy;
   const hostTech   = G.isHost ? G.myTech : G.foeTech;
   const guestTech  = G.isHost ? G.foeTech : G.myTech;
+  if(G.bot) G.bot.intel=cloneJSON(G.myDeploy);   // the bot sees the player's last army (same intel a human gets)
   const simSeed = G.seed + G.round*7919;
   const result = simulate(hostDeploy, guestDeploy, hostTech, guestTech, simSeed);
   recRound(simSeed, hostDeploy, guestDeploy, hostTech, guestTech, result);   // the whole round is reproducible from these inputs
@@ -2391,6 +2463,7 @@ $('btnLobby').onclick=leaveToLobby;
 try{ const n=localStorage.getItem('ironsiege.name'); if(n&&!$('playerName').value) $('playerName').value=cleanName(n,''); }catch(_){}
 $('playerName').addEventListener('input',e=>{ try{ localStorage.setItem('ironsiege.name',e.target.value.trim().slice(0,14)); }catch(_){} });
 $('btnSearch').onclick=mmStart;
+$('btnBot').onclick=startBotMatch;
 $('btnSearchCancel').onclick=mmCancel;
 $('btnReplayOpen').onclick=()=>{ const v=$('replayCode').value; if(!v.trim()){ toast('Pegá un enlace de replay'); return; } replayImport(v); };
 $('rpPlay').onclick=()=>{ if(RP.rec) replayToggle(); };

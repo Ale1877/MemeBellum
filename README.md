@@ -34,6 +34,8 @@ Triángulo de contras: **enjambre > pesado > rango > enjambre**; el asalto es ge
 
 ### Modos
 - **Buscar partida rápida**: cola abierta sin servidor propio (ver *Matchmaking* abajo).
+- **Práctica vs bot**: partida solo contra un bot que juega con las **mismas reglas** que una persona (desbloquea lo que le ofrecen, solo despliega
+  lo que tiene y puede pagar, y su despliegue pasa por la misma validación que el de un rival real). Útil para aprender y para cuando nadie está en la cola.
 - **Jugar con un amigo (1v1 privado)**: creás una sala y le pasás el **código** o el **enlace** (`?sala=CODIGO`).
 - **Revancha** directa al terminar, **replays** de todas tus partidas (se comparten por enlace) y **reconexión** si se corta.
 
@@ -86,6 +88,13 @@ NODE_PATH=$(npm root -g) node tests/perf.js           # costo de dibujo por fram
 Cómo funcionan: `tests/load.js` carga el `<script>` de `index.html` en un contexto de Node con un DOM falso;
 `tests/net.js` + `tests/fakepeer.js` simulan varias máquinas sobre una red PeerJS falsa con reloj controlado;
 `tests/balance.js` ofrece métricas de balance reproducibles.
+
+## Ritmo de las partidas
+
+`node tools/match-sim.js [partidas] [semilla]` juega partidas completas **bot contra bot** sin pantalla, con las reglas reales (desbloqueos,
+ejército restaurado, daño a la base) y reporta duración, ventaja de posición y daño por ronda. Con 1000 de vida de base y el daño actual
+las partidas duran ~7,8 rondas (5–11), casi nunca llegan al límite de 12 y el anfitrión gana ~52 % (sin sesgo). Si se cambia `BASE_HP`,
+la fórmula del daño, los ingresos o las unidades, conviene volver a correrlo.
 
 ## Balance
 

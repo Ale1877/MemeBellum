@@ -922,6 +922,63 @@ pending.push((async () => {
   check('desbloqueos: ofertas idénticas en ambas máquinas, flujo, tramposos y elección automática', fail.length === 0, fail.slice(0, 4).join('; '));
 }
 
+// (x) bot de práctica: juega con las mismas reglas (legal, determinista), termina partidas completas y funciona dentro del juego
+{
+  const { makeCrowd } = require('./net');
+  const fail = [];
+  const { api, playMatch } = require('../tools/match-sim');
+
+  // A. legalidad: nunca gasta de más, solo despliega/investiga lo desbloqueado y elige dentro de su oferta
+  { const { G } = api;
+    for (let seed = 1; seed <= 25; seed++) for (const side of ['host', 'guest']) {
+      G.seed = seed * 7919; const bs = api.botNew(); let earned = 0, last = null;
+      for (let round = 1; round <= 10; round++) {
+        const income = 200 + 80 * (round - 1); earned += income;
+        const offer = api.unlockOffer(side, round, bs.unlocked);
+        bs.intel = last; const m = api.botTurn(bs, round, income, G.seed, side); last = m.deploy;
+        if (offer.length ? !offer.includes(m.unlock) : m.unlock !== null) fail.push(`A${seed}/${side}/r${round}: desbloqueo fuera de oferta (${m.unlock})`);
+        const spent = m.deploy.reduce((s, d) => s + api.UNITS[d.id].cost, 0) + Object.keys(m.tech).reduce((s, id) => s + api.UNITS[id].tech.cost, 0);
+        if (spent > earned || bs.gold < 0) fail.push(`A${seed}/${side}/r${round}: gastó ${spent} de ${earned} (oro ${bs.gold})`);
+        if (m.deploy.some(d => !bs.unlocked.has(d.id)) || Object.keys(m.tech).some(id => !bs.unlocked.has(id))) fail.push(`A${seed}/${side}/r${round}: usó algo bloqueado`);
+        if (m.deploy.some(d => !(d.x >= 0 && d.x <= 1000 && d.y >= 220 && d.y <= 440))) fail.push(`A${seed}/${side}/r${round}: posición fuera de su mitad`);
+        if (m.deploy.length > 60) fail.push(`A${seed}/${side}/r${round}: ejército de ${m.deploy.length} unidades (tope 60)`);
+        if (fail.length > 6) break;
+      } if (fail.length > 6) break; } }
+  // B. determinismo: mismas entradas, mismo mensaje
+  { const { G } = api; G.seed = 4242; const a = api.botNew(), b = api.botNew(); let same = true;
+    for (let r = 1; r <= 6; r++) { const x = JSON.stringify(api.botTurn(a, r, 200 + 80 * (r - 1), 4242, 'guest')), y = JSON.stringify(api.botTurn(b, r, 200 + 80 * (r - 1), 4242, 'guest')); if (x !== y) same = false; }
+    if (!same) fail.push('B: el bot no es determinista con las mismas entradas'); }
+  // C. partidas completas bot vs bot con las reglas reales: terminan, con ganador y dentro del límite
+  for (const seed of [11, 22, 33, 44]) { const r = playMatch(seed * 1013);
+    if (!['host', 'guest', 'draw'].includes(r.outcome) || r.rounds.length < 3 || r.rounds.length > 12) fail.push(`C${seed}: partida rara (${r.outcome}, ${r.rounds.length} rondas)`);
+    if (r.outcome === 'host' && r.base.guest > 0 && !r.endedByLimit) fail.push(`C${seed}: ganó el host sin destruir la base ni agotar rondas`); }
+
+  // D. dentro del juego: partida real contra el bot hasta el final, revancha y salida
+  { const c = makeCrowd(1); const M = c.ms[0]; const G = M.G; const el = (id) => M.ctx.document.getElementById(id);
+    el('playerName').value = 'Ale'; M.api.startBotMatch(); c.run(200);
+    if (G.phase !== 'plan' || G.foeName !== 'BOT' || !G.bot || !G.isHost) fail.push(`D: no arrancó la partida vs bot (${G.phase}, ${G.foeName})`);
+    if (!G.foeReady) fail.push('D: el bot debía tener su despliegue listo al empezar la ronda');
+    if (G.foeDeploy && G.foeDeploy.some(d => !G.foeUnlocked.has(d.id))) fail.push('D: el bot desplegó algo bloqueado');
+    G.battleSpeed = 4;
+    c.run(100000);                                        // sin tráfico: no debe haber "rival desconectado" (no hay latidos)
+    if (G.reconnecting || G.phase === 'over' && !G.matchEnded) fail.push('D: el bot provocó una desconexión falsa');
+    let g = 0, guard = 0;
+    while (G.phase !== 'over' && g++ < 400) {
+      if (G.phase === 'plan' && !G.myReady) { if (G.myDeploy.length < 3) G.myDeploy.push({ id: 'warden', lvl: 1, x: 300 + g * 7 % 300, y: 400 }, { id: 'crawler', lvl: 1, x: 600, y: 410 }); M.api.confirmReady(true); }
+      c.run(500);
+    }
+    if (G.phase !== 'over' || !G.matchEnded) fail.push(`D: la partida vs bot no terminó (${G.phase}, ronda ${G.round})`);
+    if (G.baseMe > 0 && G.baseFoe > 0 && G.round < 12) fail.push('D: terminó sin base destruida ni límite de rondas');
+    if (G.round > 12) fail.push('D: pasó el límite de rondas');
+    if (!G.foeUnlocked || G.foeUnlocked.size < 5) fail.push('D: el bot no desbloqueó unidades durante la partida (' + G.foeUnlocked.size + ')');
+    // revancha inmediata con el bot: estado limpio y vuelve a jugar
+    M.api.requestRematch(); c.run(300);
+    if (G.phase !== 'plan' || G.round !== 1 || G.baseMe !== 1000 || G.baseFoe !== 1000 || G.matchEnded || G.foeUnlocked.size !== 4 || !G.bot || G.bot.unlocked.size !== 4) fail.push(`D: la revancha vs bot no reinició (${G.phase}, r${G.round}, ${G.baseMe}/${G.baseFoe}, bot ${G.bot && G.bot.unlocked.size})`);
+    if (!G.foeReady) fail.push('D: tras la revancha el bot debía tener su despliegue listo');
+    M.api.leaveToLobby(); if (G.bot || G.phase !== 'lobby') fail.push('D: salir al lobby no limpió el bot'); }
+  check('bot: legal, determinista, partidas completas bot-vs-bot y flujo real (revancha, sin falsas desconexiones)', fail.length === 0, fail.slice(0, 4).join('; '));
+}
+
 // --report: tabla de winrates entre todos los tipos y unidades
 if (process.argv.includes('--report')) {
   console.log('\nTriángulo por presupuesto (% victorias del que debería ganar):');
